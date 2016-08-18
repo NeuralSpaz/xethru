@@ -71,7 +71,7 @@ func NewSensor(transport string, connection string) (Sensor, error) {
 		}
 
 		connection = net.JoinHostPort(host, port)
-		fmt.Println(connection)
+		// fmt.Println(connection)
 		s.Conn, err = net.Dial("tcp", connection)
 		if err != nil {
 			log.Println(err)
@@ -84,6 +84,20 @@ func NewSensor(transport string, connection string) (Sensor, error) {
 			return Sensor{}, err
 		}
 		connection = net.JoinHostPort(host, port)
+		srvaddr, err := net.ResolveUDPAddr("udp", connection)
+		if err != nil {
+			log.Println(err)
+		}
+		locaddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+		if err != nil {
+			log.Println(err)
+		}
+		s.Conn, err = net.DialUDP("udp", locaddr, srvaddr)
+		if err != nil {
+			log.Println(err)
+			return s, err
+		}
+		s.mode = "network"
 	case "serial":
 		if runtime.GOOS == "windows" {
 			if !strings.Contains(connection, "COM") {
@@ -157,7 +171,22 @@ func (s *Sensor) write(b []byte) (n int, err error) {
 }
 
 // Close closes the connections to sensor
-func (s *Sensor) Close() {}
+func (s *Sensor) Close() error {
+	return s.close()
+}
+
+func (s *Sensor) close() error {
+
+	if s.mode == "network" {
+		return s.Conn.Close()
+
+	}
+
+	if s.mode == "usb" {
+		return s.serial.Close()
+	}
+	return errors.New("error closing connections not set")
+}
 
 //
 // func (s *Sensor) Reset() {}

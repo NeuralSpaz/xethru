@@ -78,7 +78,7 @@ func TestChecksum(t *testing.T) {
 	}
 }
 
-func TestWrite(t *testing.T) {
+func TestWriteTCP(t *testing.T) {
 
 	cases := []struct {
 		b       []byte
@@ -106,6 +106,7 @@ func TestWrite(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		defer s.Close()
 
 		conn, err := l.Accept()
 		if err != nil {
@@ -120,6 +121,66 @@ func TestWrite(t *testing.T) {
 		}
 
 		defer conn.Close()
+		buf := bufio.NewReader(conn)
+		var message []byte
+		for i := 0; i < n; i++ {
+			b, err := buf.ReadByte()
+			if err != nil {
+				log.Println(err)
+			}
+			message = append(message, b)
+
+		}
+		if string(message) != string(c.network) {
+			t.Errorf("Expected: %x, got %x\n", c.network, message)
+		}
+	}
+
+}
+
+func TestWriteUDP(t *testing.T) {
+
+	cases := []struct {
+		b       []byte
+		n       int
+		err     error
+		network []byte
+	}{
+		{[]byte{0x01, 0x02, 0x03}, 6, nil, []byte{0x7d, 0x01, 0x02, 0x03, 0x7d, 0x7e}},
+		{[]byte{0x00, 0x01, 0x02, 0x03}, 7, nil, []byte{0x7d, 0x00, 0x01, 0x02, 0x03, 0x7d, 0x7e}},
+		{[]byte{0x00, 0x01, 0x02, 0x7e}, 8, nil, []byte{0x7d, 0x00, 0x01, 0x02, 0x7f, 0x7e, 0x00, 0x7e}},
+		{[]byte{0x7e, 0x01, 0x02, 0x7e}, 9, nil, []byte{0x7d, 0x7f, 0x7e, 0x01, 0x02, 0x7f, 0x7e, 0x7e, 0x7e}},
+		{[]byte{0x7e, 0x7e, 0x02, 0x7e}, 10, nil, []byte{0x7d, 0x7f, 0x7e, 0x7f, 0x7e, 0x02, 0x7f, 0x7e, 0x01, 0x7e}},
+		{[]byte{0x7e, 0x7e, 0x7e, 0x7e}, 11, nil, []byte{0x7d, 0x7f, 0x7e, 0x7f, 0x7e, 0x7f, 0x7e, 0x7f, 0x7e, 0x7d, 0x7e}},
+	}
+
+	for k, c := range cases {
+		// fmt.Println(k)
+		port := strconv.Itoa(k)
+		udpaddr, err := net.ResolveUDPAddr("udp", "localhost:6000"+port)
+		if err != nil {
+			t.Fatal(err)
+		}
+		conn, err := net.ListenUDP("udp", udpaddr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+
+		s, err := NewSensor("udp", "localhost:6000"+port)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.Close()
+
+		n, err := s.Write(c.b)
+		if err != c.err {
+			t.Errorf("Expected: %v, got %v\n", c.err, err)
+		}
+		if n != c.n {
+			t.Errorf("Expected: %d, got %d\n", c.n, n)
+		}
+
 		buf := bufio.NewReader(conn)
 		var message []byte
 		for i := 0; i < n; i++ {
