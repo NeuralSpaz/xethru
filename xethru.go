@@ -100,7 +100,36 @@ func NewSensor(transport string, connection string) (Sensor, error) {
 // Read Data from Sesor
 // func (s *Sensor) Read() {}
 //
-// func (s *Sensor) Write() {}
+
+// Write slice of []byes sensor without start, esc, crc, end bytes
+// implements io.Writer
+func (s *Sensor) Write(b []byte) (n int, err error) {
+	return s.write(b)
+}
+
+// Actual Impeemtation of Write
+func (s *Sensor) write(b []byte) (n int, err error) {
+	var buf packet
+	buf = append(buf, startByte)
+	buf = append(buf, b...)
+	crc, err := buf.checksum()
+	if err != nil {
+		return 0, err
+	}
+	for k := 0; k < len(buf); k++ {
+		fmt.Println(k)
+		if buf[k] == endByte {
+			buf = append(buf[:k], append([]byte{escByte}, buf[k:]...)...)
+			k++
+		}
+	}
+
+	buf = append(buf, byte(crc))
+	buf = append(buf, endByte)
+
+	return len(buf), nil
+}
+
 //
 // func (s *Sensor) Close() {}
 //
@@ -126,7 +155,8 @@ func NewSensor(transport string, connection string) (Sensor, error) {
 //
 // func read() {}
 //
-// func write() {}
+func write() {}
+
 //
 // func close() {}
 
@@ -155,12 +185,20 @@ func NewSensor(transport string, connection string) (Sensor, error) {
 type CRC byte
 
 type packet []byte
+type data []byte
+
+// Packet contains all the bytes
+// type Packet struct {
+// 	p packet
+// 	d data
+// 	c CRC
+// }
 
 // Checksum
 // Calculated by XOR’ing all bytes from <START> + [Data].
 // Note that the CRC is done after escape bytes is removed. This
 // means that CRC is also calculated before adding escape bytes.
-func (p *packet) Checksum() (CRC, error) {
+func (p *packet) checksum() (CRC, error) {
 	if (*p)[0] != startByte {
 		return 0x00, errChecksumInvalidPacketSTART
 	}

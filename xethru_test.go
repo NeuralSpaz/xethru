@@ -44,7 +44,6 @@ func TestNewSensor(t *testing.T) {
 }
 
 func TestChecksum(t *testing.T) {
-
 	cases := []struct {
 		p   packet
 		crc CRC
@@ -52,9 +51,12 @@ func TestChecksum(t *testing.T) {
 	}{
 		{[]byte{0x00, 0x01, 0x02}, 0x00, errChecksumInvalidPacketSTART},
 		{[]byte{startByte, 0x01, 0x02}, 0x7E, nil},
+		{[]byte{startByte, 0x01, 0x02, 0x03}, 0x7D, nil},
+		{[]byte{startByte, 0x01, 0x02, 0xFF}, 0x81, nil},
+		{[]byte{startByte, 0x01, 0x02, 0x7F}, 0x01, nil},
 	}
 	for _, c := range cases {
-		crc, err := c.p.Checksum()
+		crc, err := c.p.checksum()
 		if err != c.err {
 			t.Errorf("Expected: %v, got %v\n", c.err, err)
 		}
@@ -63,6 +65,35 @@ func TestChecksum(t *testing.T) {
 		// }
 		if crc != c.crc {
 			t.Errorf("Expected: %X, got %X\n", c.crc, crc)
+		}
+	}
+}
+
+func TestWrite(t *testing.T) {
+	cases := []struct {
+		b   []byte
+		n   int
+		err error
+	}{
+		{[]byte{0x01, 0x02, 0x03}, 6, nil},
+		{[]byte{0x00, 0x01, 0x02, 0x03}, 7, nil},
+		{[]byte{0x00, 0x01, 0x02, 0x7e}, 8, nil},
+		{[]byte{0x7e, 0x01, 0x02, 0x7e}, 9, nil},
+	}
+	s, err := NewSensor("serial", "/dev/ttyUSB0:9600")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cases {
+		n, err := s.write(c.b)
+		if err != c.err {
+			t.Errorf("Expected: %v, got %v\n", c.err, err)
+		}
+		// if valid != c.valid {
+		// 	t.Errorf("Expected: %v, got %v\n", c.valid, valid)
+		// }
+		if n != c.n {
+			t.Errorf("Expected: %d, got %d\n", c.n, n)
 		}
 	}
 
