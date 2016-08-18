@@ -15,10 +15,10 @@ func TestNewSensor(t *testing.T) {
 			{"tcp", "192.168.1.1:8080", nil},
 			{"udp", "192.168.1.1:8080", nil},
 			{"serial", "/dev/ttyUSB0:9600", nil},
-			{"serial", "/dev/ttyUSB0", BaudRateNotgiven},
-			{"serial", "/dev/ttyUSB0:junk", BaudRateNotanInterger},
-			{"serial", "COM10:9600", LinuxSerialConnection},
-			{"junk", "morejunk", UnsupportedTransport},
+			{"serial", "/dev/ttyUSB0", errBaudRateNotgiven},
+			{"serial", "/dev/ttyUSB0:junk", errBaudRateNotanInterger},
+			{"serial", "COM10:9600", errLinuxSerialConnection},
+			{"junk", "morejunk", errUnsupportedTransport},
 		}
 		for _, c := range cases {
 			_, err := NewSensor(c.transport, c.connection)
@@ -46,22 +46,21 @@ func TestNewSensor(t *testing.T) {
 func TestChecksum(t *testing.T) {
 
 	cases := []struct {
-		packet []byte
-		valid  bool
-		crc    CRC
-		err    error
+		p   packet
+		crc CRC
+		err error
 	}{
-		{[]byte{0x00, 0x01, 0x02}, false, 0x00, ChecksumInvalidPacketSTART},
-		{[]byte{START, 0x01, 0x02}, false, 0x7E, nil},
+		{[]byte{0x00, 0x01, 0x02}, 0x00, errChecksumInvalidPacketSTART},
+		{[]byte{startByte, 0x01, 0x02}, 0x7E, nil},
 	}
 	for _, c := range cases {
-		valid, crc, err := Checksum(c.packet)
+		crc, err := c.p.Checksum()
 		if err != c.err {
 			t.Errorf("Expected: %v, got %v\n", c.err, err)
 		}
-		if valid != c.valid {
-			t.Errorf("Expected: %v, got %v\n", c.valid, valid)
-		}
+		// if valid != c.valid {
+		// 	t.Errorf("Expected: %v, got %v\n", c.valid, valid)
+		// }
 		if crc != c.crc {
 			t.Errorf("Expected: %X, got %X\n", c.crc, crc)
 		}
