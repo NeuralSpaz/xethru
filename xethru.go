@@ -3,7 +3,9 @@ package xethru
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -19,8 +21,13 @@ const (
 
 // Sensor config
 type Sensor struct {
-	Conn string
-	buf  []byte
+	Conn   net.Conn
+	mode   string
+	ip     string
+	port   string
+	baud   int
+	serial *os.File
+	buf    []byte
 }
 
 // type packet struct {
@@ -52,6 +59,7 @@ func NewSensor(transport string, connection string) (Sensor, error) {
 	if transport != "tcp" && transport != "serial" && transport != "udp" {
 		return Sensor{}, errUnsupportedTransport
 	}
+	s := Sensor{}
 	var host, port string
 	var baud int
 	var err error
@@ -61,7 +69,15 @@ func NewSensor(transport string, connection string) (Sensor, error) {
 		if err != nil {
 			return Sensor{}, err
 		}
+
 		connection = net.JoinHostPort(host, port)
+		fmt.Println(connection)
+		s.Conn, err = net.Dial("tcp", connection)
+		if err != nil {
+			log.Println(err)
+			return s, err
+		}
+		s.mode = "network"
 	case "udp":
 		host, port, err = net.SplitHostPort(connection)
 		if err != nil {
@@ -92,8 +108,6 @@ func NewSensor(transport string, connection string) (Sensor, error) {
 		fmt.Println(baud, port)
 	}
 
-	s := Sensor{Conn: connection}
-
 	return s, nil
 }
 
@@ -101,7 +115,7 @@ func NewSensor(transport string, connection string) (Sensor, error) {
 // func (s *Sensor) Read() {}
 //
 
-// Write slice of []byes sensor without start, esc, crc, end bytes
+// Write slice of []byes sensor without start, esc, crc or end bytes
 // implements io.Writer
 func (s *Sensor) Write(b []byte) (n int, err error) {
 	return s.write(b)
@@ -109,29 +123,42 @@ func (s *Sensor) Write(b []byte) (n int, err error) {
 
 // Actual Impeemtation of Write
 func (s *Sensor) write(b []byte) (n int, err error) {
-	var buf packet
-	buf = append(buf, startByte)
-	buf = append(buf, b...)
-	crc, err := buf.checksum()
-	if err != nil {
-		return 0, err
-	}
-	for k := 0; k < len(buf); k++ {
-		fmt.Println(k)
-		if buf[k] == endByte {
-			buf = append(buf[:k], append([]byte{escByte}, buf[k:]...)...)
+	b = append(b[:0], append([]byte{startByte}, b[0:]...)...)
+	// Should be no error here ever as we just set the startByte
+	crc, _ := checksum(&b)
+
+	// escape non endBytes 7e's
+	for k := 0; k < len(b); k++ {
+		if b[k] == endByte {
+			b = append(b[:k], append([]byte{escByte}, b[k:]...)...)
 			k++
 		}
 	}
 
-	buf = append(buf, byte(crc))
-	buf = append(buf, endByte)
+	// add crc
+	b = append(b, byte(crc))
+	// add endByte
+	b = append(b, endByte)
 
-	return len(buf), nil
+	// actually write to interface here
+	// file descriper if serial
+	// net.Conn if tcp
+
+	if s.mode == "network" {
+		return s.Conn.Write(b)
+
+	}
+
+	if s.mode == "usb" {
+		return s.serial.Write(b)
+	}
+
+	return len(b), nil
 }
 
-//
-// func (s *Sensor) Close() {}
+// Close closes the connections to sensor
+func (s *Sensor) Close() {}
+
 //
 // func (s *Sensor) Reset() {}
 //
@@ -198,7 +225,7 @@ type data []byte
 // Calculated by XOR’ing all bytes from <START> + [Data].
 // Note that the CRC is done after escape bytes is removed. This
 // means that CRC is also calculated before adding escape bytes.
-func (p *packet) checksum() (CRC, error) {
+func checksum(p *[]byte) (CRC, error) {
 	if (*p)[0] != startByte {
 		return 0x00, errChecksumInvalidPacketSTART
 	}

@@ -1,19 +1,28 @@
 package xethru
 
 import (
+	"bufio"
 	"fmt"
+	"log"
+	"net"
 	"runtime"
+	"strconv"
 	"testing"
 )
 
 func TestNewSensor(t *testing.T) {
 	if runtime.GOOS == "linux" {
+		l, err := net.Listen("tcp", ":30000")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer l.Close()
 		cases := []struct {
 			transport, connection string
 			err                   error
 		}{
-			{"tcp", "192.168.1.1:8080", nil},
-			{"udp", "192.168.1.1:8080", nil},
+			{"tcp", "localhost:30000", nil},
+			{"udp", "localhost:30000", nil},
 			{"serial", "/dev/ttyUSB0:9600", nil},
 			{"serial", "/dev/ttyUSB0", errBaudRateNotgiven},
 			{"serial", "/dev/ttyUSB0:junk", errBaudRateNotanInterger},
@@ -45,7 +54,7 @@ func TestNewSensor(t *testing.T) {
 
 func TestChecksum(t *testing.T) {
 	cases := []struct {
-		p   packet
+		p   []byte
 		crc CRC
 		err error
 	}{
@@ -56,7 +65,7 @@ func TestChecksum(t *testing.T) {
 		{[]byte{startByte, 0x01, 0x02, 0x7F}, 0x01, nil},
 	}
 	for _, c := range cases {
-		crc, err := c.p.checksum()
+		crc, err := checksum(&c.p)
 		if err != c.err {
 			t.Errorf("Expected: %v, got %v\n", c.err, err)
 		}
@@ -70,30 +79,59 @@ func TestChecksum(t *testing.T) {
 }
 
 func TestWrite(t *testing.T) {
+
 	cases := []struct {
-		b   []byte
-		n   int
-		err error
+		b       []byte
+		n       int
+		err     error
+		network []byte
 	}{
-		{[]byte{0x01, 0x02, 0x03}, 6, nil},
-		{[]byte{0x00, 0x01, 0x02, 0x03}, 7, nil},
-		{[]byte{0x00, 0x01, 0x02, 0x7e}, 8, nil},
-		{[]byte{0x7e, 0x01, 0x02, 0x7e}, 9, nil},
+		{[]byte{0x01, 0x02, 0x03}, 6, nil, []byte{0x7d, 0x01, 0x02, 0x03, 0x7d, 0x7e}},
+		{[]byte{0x00, 0x01, 0x02, 0x03}, 7, nil, []byte{0x7d, 0x00, 0x01, 0x02, 0x03, 0x7d, 0x7e}},
+		{[]byte{0x00, 0x01, 0x02, 0x7e}, 8, nil, []byte{0x7d, 0x00, 0x01, 0x02, 0x7f, 0x7e, 0x00, 0x7e}},
+		{[]byte{0x7e, 0x01, 0x02, 0x7e}, 9, nil, []byte{0x7d, 0x7f, 0x7e, 0x01, 0x02, 0x7f, 0x7e, 0x7e, 0x7e}},
+		{[]byte{0x7e, 0x7e, 0x02, 0x7e}, 10, nil, []byte{0x7d, 0x7f, 0x7e, 0x7f, 0x7e, 0x02, 0x7f, 0x7e, 0x01, 0x7e}},
+		{[]byte{0x7e, 0x7e, 0x7e, 0x7e}, 11, nil, []byte{0x7d, 0x7f, 0x7e, 0x7f, 0x7e, 0x7f, 0x7e, 0x7f, 0x7e, 0x7d, 0x7e}},
 	}
-	s, err := NewSensor("serial", "/dev/ttyUSB0:9600")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range cases {
-		n, err := s.write(c.b)
+
+	for k, c := range cases {
+		port := strconv.Itoa(k)
+		l, err := net.Listen("tcp", ":3000"+port)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer l.Close()
+
+		s, err := NewSensor("tcp", "localhost:3000"+port)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		conn, err := l.Accept()
+		if err != nil {
+			return
+		}
+		n, err := s.Write(c.b)
 		if err != c.err {
 			t.Errorf("Expected: %v, got %v\n", c.err, err)
 		}
-		// if valid != c.valid {
-		// 	t.Errorf("Expected: %v, got %v\n", c.valid, valid)
-		// }
 		if n != c.n {
 			t.Errorf("Expected: %d, got %d\n", c.n, n)
+		}
+
+		defer conn.Close()
+		buf := bufio.NewReader(conn)
+		var message []byte
+		for i := 0; i < n; i++ {
+			b, err := buf.ReadByte()
+			if err != nil {
+				log.Println(err)
+			}
+			message = append(message, b)
+
+		}
+		if string(message) != string(c.network) {
+			t.Errorf("Expected: %x, got %x\n", c.network, message)
 		}
 	}
 
