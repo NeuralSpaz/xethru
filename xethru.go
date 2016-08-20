@@ -3,7 +3,6 @@ package xethru
 import (
 	"errors"
 	"io"
-	"log"
 )
 
 // Flow Control bytes
@@ -35,7 +34,7 @@ func NewXethruWriter(w io.Writer) io.Writer {
 func (x *xethruFrameWriter) Write(p []byte) (n int, err error) {
 
 	p = append(p[:0], append([]byte{startByte}, p[0:]...)...)
-	crc, _ := checksum(p)
+	crc, _ := checksum(&p)
 	for k := 0; k < len(p); k++ {
 		if p[k] == endByte {
 			p = append(p[:k], append([]byte{escByte}, p[k:]...)...)
@@ -50,91 +49,78 @@ func (x *xethruFrameWriter) Write(p []byte) (n int, err error) {
 }
 
 type xethruFrameReader struct {
-	r      io.Reader
-	err    error
-	toRead []byte
+	r io.Reader
+	// err    error
+	// toRead []byte
 }
 
 func NewXethruReader(r io.Reader) io.Reader {
-	return &xethruFrameReader{
-		r:      r,
-		err:    nil,
-		toRead: make([]byte, 512),
-	}
+	return &xethruFrameReader{r}
+	// r:      r,
+	// err:    nil,
+	// toRead: make([]byte, 128),
+	// }
 }
 
 func (x *xethruFrameReader) Read(b []byte) (n int, err error) {
-	for {
-		n, x.err = x.r.Read(x.toRead)
-		if n > 0 {
-			x.toRead, n, err = xethuProtocol(x.toRead, n)
-			if err != nil {
-				log.Println(err)
-			}
-			copy(b, x.toRead)
-			if len(x.toRead) == 0 {
-				return n, io.EOF
-			}
-			return n, nil
+	// read from the reader
+	n, err = x.r.Read(b)
+	if n > 0 {
+		var last byte
+		// pop endByte
+		last, b = b[n-1], b[:n-1]
+		n--
+		if last != endByte {
+			return 0, ErrorPacketNotEndbyte
 		}
-		if x.err != nil {
-			return 0, x.err
+		// delete escBytes
+		for i := 0; i < n; i++ {
+			if b[i] == escByte {
+				b = b[:i+copy(b[i:], b[i+1:])]
+				n--
+			}
 		}
+		var crcByte byte
+		// pop crcbyte
+		crcByte, b = b[len(b)-1], b[:len(b)-1]
+		n--
+		crc, err := checksum(&b)
+		if err != nil {
+			return 0, ErrorPacketNoStartByte
+		}
+		if crcByte != crc {
+			return 0, ErrorPacketBadCRC
+		}
+		// delete startByte
+		b = b[:0+copy(b[0:], b[1:])]
+		n--
+		if n == 0 {
+			return n, io.EOF
+		}
+		return n, nil
+	}
+	if err != nil {
+		return 0, err
 	}
 	return 0, io.EOF
 }
 
-func xethuProtocol(b []byte, n int) ([]byte, int, error) {
-	if len(b) == 0 {
-		return nil, 0, errors.New("zero size")
-	}
-	if b[0] != startByte {
-		return nil, 0, errors.New("no startbyte")
-	}
-	var last byte
-	last, b = b[n-1], b[:n-1]
-	n--
-	if last != endByte {
-		return nil, 0, errors.New("does not end with endbyte")
-	}
-	for i := 0; i < n; i++ {
-		if b[i] == escByte {
-			b = b[:i+copy(b[i:], b[i+1:])]
-			n--
-		}
-	}
-
-	// pop off crc byte
-	var crcByte byte
-	crcByte, b = b[len(b)-1], b[:len(b)-1]
-	n--
-
-	crc, err := checksum(b)
-	if err != nil {
-		log.Println(err)
-	}
-
-	//
-	if crcByte != crc {
-		return nil, 0, errors.New("failed checksum")
-	}
-
-	// cut startByte off
-	b = b[1:]
-	n--
-	return b, n, nil
-}
+var (
+	ErrorPacketNoStartByte = errors.New("no startbyte")
+	ErrorPacketNotEndbyte  = errors.New("does not end with endbyte")
+	ErrorPacketBadCRC      = errors.New("failed checksum")
+)
 
 // Calculated by XOR’ing all bytes from <START> + [Data].
 // Note that the CRC is done after escape bytes is removed. This
 // means that CRC is also calculated before adding escape bytes.
-func checksum(p []byte) (byte, error) {
+func checksum(p *[]byte) (byte, error) {
 	// fmt.Printf("byte to check sum %x\n", p)
-	if (p)[0] != startByte {
+	if (*p)[0] != startByte {
 		return 0x00, errChecksumInvalidPacketSTART
 	}
 	var crc byte
-	for _, b := range p {
+	for _, b := range *p {
 		crc = crc ^ b
 	}
 
