@@ -1,3 +1,10 @@
+// xethru  Copyright (C) 2016
+// This work is copyright no part may be reproduced by any process,
+// nor may any other exclusive right be exercised, without the permission of
+// NeuralSpaz aka Josh Gardiner 2016
+// It is my intent that this will be released as open source at some
+// future time. If you would like to contribute please contact me.
+
 package xethru
 
 import (
@@ -34,6 +41,7 @@ func NewXethruWriter(w io.Writer) io.Writer {
 func (x *xethruFrameWriter) Write(p []byte) (n int, err error) {
 
 	p = append(p[:0], append([]byte{startByte}, p[0:]...)...)
+	// cant be error from checksum at we just set the startByte
 	crc, _ := checksum(&p)
 	for k := 0; k < len(p); k++ {
 		if p[k] == endByte {

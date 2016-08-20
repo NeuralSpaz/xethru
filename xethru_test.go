@@ -1,3 +1,9 @@
+// xethru  Copyright (C) 2016
+// This work is copyright no part may be reproduced by any process,
+// nor may any other exclusive right be exercised, without the permission of
+// NeuralSpaz aka Josh Gardiner 2016
+// It is my intent that this will be released as open source at some
+// future time. If you would like to contribute please contact me.
 package xethru
 
 import (
@@ -57,7 +63,6 @@ func TestXethruRead(t *testing.T) {
 		{[]byte{0x01, 0x02, 0x03}, ErrorPacketNoStartByte, []byte{0x1d, 0x01, 0x02, 0x03, 0x7d, 0x7e}},
 		{[]byte{0x01, 0x02, 0x03}, ErrorPacketNotEndbyte, []byte{0x7d, 0x01, 0x02, 0x03, 0x7d, 0x7d}},
 		{[]byte{0x01, 0x02, 0x03}, ErrorPacketBadCRC, []byte{0x7d, 0x01, 0x02, 0x03, 0x71, 0x7e}},
-		// {[]byte{0x01, 0x02, 0x03}, io.EOF, []byte{0x7d, 0x7d, 0x7e}},
 	}
 
 	for _, c := range cases {
