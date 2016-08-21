@@ -23,13 +23,20 @@ const (
 type x2m200Frame struct {
 	x2m200FrameWriter
 	x2m200FrameReader
+	x2m200FrameCloser
 }
 
 //
 //
 func NewReadWriter(rw io.ReadWriter) io.ReadWriter {
 	// if model == "x2m200" {
-	return &x2m200Frame{x2m200FrameWriter{rw}, x2m200FrameReader{rw}}
+	return &x2m200Frame{x2m200FrameWriter{rw}, x2m200FrameReader{rw}, x2m200FrameCloser{nil}}
+	// }
+}
+
+func NewReadWriteCloser(rwc io.ReadWriteCloser) io.ReadWriteCloser {
+	// if model == "x2m200" {
+	return &x2m200Frame{x2m200FrameWriter{rwc}, x2m200FrameReader{rwc}, x2m200FrameCloser{rwc}}
 	// }
 }
 
@@ -53,6 +60,14 @@ func (x *x2m200FrameWriter) Write(p []byte) (n int, err error) {
 
 	n, err = x.w.Write(p)
 	return
+}
+
+type x2m200FrameCloser struct {
+	c io.Closer
+}
+
+func (x *x2m200FrameCloser) Close() error {
+	return x.c.Close()
 }
 
 type x2m200FrameReader struct {
