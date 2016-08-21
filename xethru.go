@@ -27,6 +27,7 @@ type x2m200Frame struct {
 }
 
 //
+
 //
 func NewReadWriter(rw io.ReadWriter) io.ReadWriter {
 	// if model == "x2m200" {
