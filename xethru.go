@@ -20,25 +20,24 @@ const (
 	escByte   = 0x7F
 )
 
-// Sensorer implements io.Writer and io.Reader
-type Sensorer interface {
-	// NewXethruWriter(w io.Writer) io.Writer
-	// Write(p []byte) (n int, err error)
-	// io.Reader
-	// Read(p []byte) (n int, err error)
-	// Checksum(p []byte) (crc byte, err error)
+type x2m200Frame struct {
+	x2m200FrameWriter
+	x2m200FrameReader
 }
 
-type xethruFrameWriter struct {
+//
+//
+func NewReadWriter(rw io.ReadWriter) io.ReadWriter {
+	// if model == "x2m200" {
+	return &x2m200Frame{x2m200FrameWriter{rw}, x2m200FrameReader{rw}}
+	// }
+}
+
+type x2m200FrameWriter struct {
 	w io.Writer
 }
 
-// NewXethruWriter builds data frame
-func NewXethruWriter(w io.Writer) io.Writer {
-	return &xethruFrameWriter{w}
-}
-
-func (x *xethruFrameWriter) Write(p []byte) (n int, err error) {
+func (x *x2m200FrameWriter) Write(p []byte) (n int, err error) {
 
 	p = append(p[:0], append([]byte{startByte}, p[0:]...)...)
 	// cant be error from checksum at we just set the startByte
@@ -56,21 +55,11 @@ func (x *xethruFrameWriter) Write(p []byte) (n int, err error) {
 	return
 }
 
-type xethruFrameReader struct {
+type x2m200FrameReader struct {
 	r io.Reader
-	// err    error
-	// toRead []byte
 }
 
-func NewXethruReader(r io.Reader) io.Reader {
-	return &xethruFrameReader{r}
-	// r:      r,
-	// err:    nil,
-	// toRead: make([]byte, 128),
-	// }
-}
-
-func (x *xethruFrameReader) Read(b []byte) (n int, err error) {
+func (x *x2m200FrameReader) Read(b []byte) (n int, err error) {
 	// read from the reader
 	n, err = x.r.Read(b)
 	if n > 0 {
