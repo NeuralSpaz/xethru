@@ -81,17 +81,19 @@ func (x *xethruFrameReader) Read(b []byte) (n int, err error) {
 		if last != endByte {
 			return 0, ErrorPacketNotEndbyte
 		}
+		// pop crcByte to check later
+		var crcByte byte
+		crcByte, b = b[n-1], b[:n-1]
+		n--
 		// delete escBytes
-		for i := 0; i < n; i++ {
-			if b[i] == escByte {
+		for i := 0; i < (n - 1); i++ {
+			if b[i] == escByte && b[i+1] == endByte {
 				b = b[:i+copy(b[i:], b[i+1:])]
 				n--
 			}
 		}
-		var crcByte byte
-		// pop crcbyte
-		crcByte, b = b[len(b)-1], b[:len(b)-1]
-		n--
+
+		// check crcbyte
 		crc, err := checksum(&b)
 		if err != nil {
 			return 0, ErrorPacketNoStartByte
@@ -101,6 +103,9 @@ func (x *xethruFrameReader) Read(b []byte) (n int, err error) {
 		}
 		// delete startByte
 		b = b[:0+copy(b[0:], b[1:])]
+		// for i := 0; i < n; i++ {
+		// 	fmt.Println(i)
+		// }
 		n--
 		if n == 0 {
 			return n, io.EOF
@@ -110,7 +115,7 @@ func (x *xethruFrameReader) Read(b []byte) (n int, err error) {
 	if err != nil {
 		return 0, err
 	}
-	return 0, io.EOF
+	return 0, nil
 }
 
 var (
