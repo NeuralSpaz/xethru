@@ -16,11 +16,31 @@ import (
 
 // testing helper
 func NewXethruWriter(w io.Writer) io.Writer {
-	return &x2m200FrameWriter{w}
+	return x2m200Frame{w: w}
 }
 
 func NewXethruReader(r io.Reader) io.Reader {
-	return &x2m200FrameReader{r}
+	return x2m200Frame{r: r}
+}
+
+func x2m200ProtocolwithTransit(in []byte) ([]byte, []byte, error) {
+	var b bytes.Buffer
+	w := bufio.NewWriter(&b)
+	xw := NewXethruWriter(w)
+
+	_, err := xw.Write(in)
+	w.Flush()
+	if err != nil {
+		return nil, nil, err
+	}
+	transit := b.Bytes()
+	xr := NewXethruReader(&b)
+
+	readback, err := ioutil.ReadAll(xr)
+	if err != nil {
+		return nil, nil, err
+	}
+	return readback, transit, err
 }
 
 func TestXethruWrite(t *testing.T) {
@@ -96,3 +116,80 @@ func TestXethruRead(t *testing.T) {
 		}
 	}
 }
+
+func NewTestDevice(name string) io.ReadWriter { return nil }
+
+func TestPing(t *testing.T) {
+}
+
+func TestIsValidPingResponse(t *testing.T) {
+	cases := []struct {
+		b   []byte
+		err error
+		ok  bool
+	}{
+		{[]byte{0x01}, errPingNotEnoughBytes, false},
+		{[]byte{0x02, 0x00, 0x00, 0x00, 0x00}, errPingDoesNotStartWithPingCMD, false},
+		{[]byte{0x01, 0x01, 0x02, 0x03, 0x04}, errPingDoesNotContainResponse, false},
+		{[]byte{0x01, 0xae, 0xea, 0xee, 0xaa}, nil, false},
+		{[]byte{0x01, 0xaa, 0xee, 0xae, 0xea}, nil, true},
+	}
+	for _, c := range cases {
+		ok, err := isValidPingResponse(c.b)
+
+		if err != c.err {
+			t.Errorf("expected %+v, got %+v", c.err, err)
+		}
+		if ok != c.ok {
+			t.Errorf("expected %+v, got %+v", c.ok, ok)
+		}
+	}
+}
+
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
