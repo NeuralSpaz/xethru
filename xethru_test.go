@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
+	"log"
 	"testing"
 )
 
@@ -59,6 +60,7 @@ func TestXethruWrite(t *testing.T) {
 		{[]byte{0x7e, 0x01, 0x02, 0x7e}, 9, nil, []byte{0x7d, 0x7f, 0x7e, 0x01, 0x02, 0x7f, 0x7e, 0x7e, 0x7e}},
 		{[]byte{0x7e, 0x7e, 0x02, 0x7e}, 10, nil, []byte{0x7d, 0x7f, 0x7e, 0x7f, 0x7e, 0x02, 0x7f, 0x7e, 0x01, 0x7e}},
 		{[]byte{0x7e, 0x7e, 0x7e, 0x7e}, 11, nil, []byte{0x7d, 0x7f, 0x7e, 0x7f, 0x7e, 0x7f, 0x7e, 0x7f, 0x7e, 0x7d, 0x7e}},
+		{[]byte{0x01, 0xee, 0xaa, 0xea, 0xae}, 8, nil, []byte{0x7d, 0x01, 0xee, 0xaa, 0xea, 0xae, 0x7c, 0x7e}},
 	}
 	for _, c := range cases {
 		var b bytes.Buffer
@@ -117,11 +119,6 @@ func TestXethruRead(t *testing.T) {
 	}
 }
 
-func NewTestDevice(name string) io.ReadWriter { return nil }
-
-func TestPing(t *testing.T) {
-}
-
 func TestIsValidPingResponse(t *testing.T) {
 	cases := []struct {
 		b   []byte
@@ -144,6 +141,53 @@ func TestIsValidPingResponse(t *testing.T) {
 			t.Errorf("expected %+v, got %+v", c.ok, ok)
 		}
 	}
+}
+
+func newLoopBackXethru() framer {
+	pr, pw := io.Pipe()
+
+	return x2m200Frame{pw, pr}
+
+}
+
+func TestPing(t *testing.T) {
+
+	// Wire up sensor and client
+	sensorReader, clientWriter := io.Pipe()
+	clientReader, sensorWriter := io.Pipe()
+	client := x2m200Frame{clientWriter, clientReader}
+	sensor := x2m200Frame{sensorWriter, sensorReader}
+
+	// setup sensor to reply
+	go func() {
+		b := make([]byte, 20)
+		n, err := sensor.Read(b)
+		if err != nil {
+			log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+		}
+		// for {
+		for n == 0 {
+			n, err = sensor.Read(b)
+			if err != nil {
+				log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+				log.Printf("bytes %x\n", b)
+			}
+		}
+		if bytes.Contains(b, []byte{0x01, 0xee, 0xaa, 0xea, 0xae}) {
+			sensor.Write([]byte{0x01, 0xaa, 0xee, 0xae, 0xea})
+		}
+	}()
+
+	ok, err := client.Ping(0)
+
+	if !ok {
+		t.Errorf("expected %+v, got %+v", true, ok)
+	}
+
+	if err != nil {
+		t.Errorf("expected %+v, got %+v", nil, err)
+	}
+
 }
 
 //

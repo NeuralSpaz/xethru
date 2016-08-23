@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"log"
 	"time"
 )
 
@@ -46,7 +47,7 @@ func NewReadWriter(r io.Reader, w io.Writer) framer {
 type framer interface {
 	io.Writer
 	io.Reader
-	Ping() (bool, error)
+	Ping(t time.Duration) (bool, error)
 }
 
 type x2m200Frame struct {
@@ -55,7 +56,6 @@ type x2m200Frame struct {
 }
 
 func (x x2m200Frame) Write(p []byte) (n int, err error) {
-
 	p = append(p[:0], append([]byte{startByte}, p[0:]...)...)
 	// cant be error from checksum at we just set the startByte
 	crc, _ := checksum(&p)
@@ -72,18 +72,6 @@ func (x x2m200Frame) Write(p []byte) (n int, err error) {
 	return
 }
 
-// type x2m200FrameCloser struct {
-// 	c io.Closer
-// }
-//
-// func (x *x2m200Frame) Close() error {
-// 	return x.c.Close()
-// }
-
-// type x2m200FrameReader struct {
-// 	r io.Reader
-// }
-
 func (x x2m200Frame) Read(b []byte) (n int, err error) {
 	// read from the reader
 	n, err = x.r.Read(b)
@@ -93,7 +81,7 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 		last, b = b[n-1], b[:n-1]
 		n--
 		if last != endByte {
-			return 0, ErrorPacketNotEndbyte
+			return n, ErrorPacketNotEndbyte
 		}
 		// pop crcByte to check later
 		var crcByte byte
@@ -163,12 +151,14 @@ const (
 	x2m200PingResponseNotReady = 0xaeeaeeaa
 )
 
-func (x x2m200Frame) Ping() (bool, error) {
-
-	resp := ping(x)
-
+func (x x2m200Frame) Ping(t time.Duration) (bool, error) {
+	resp := make(chan []byte)
+	x.ping(resp)
+	if t == 0 {
+		t = time.Second
+	}
 	select {
-	case <-time.After(time.Millisecond * 500):
+	case <-time.After(t):
 		return false, errors.New("ping timeout")
 	case r := <-resp:
 		ok, err := isValidPingResponse(r)
@@ -179,9 +169,42 @@ func (x x2m200Frame) Ping() (bool, error) {
 
 }
 
-func ping(x framer) <-chan []byte {
-	response := make(chan []byte)
-	return response
+func (x x2m200Frame) ping(response chan []byte) {
+	// response := make(chan []byte)
+	go func() {
+		// build ping command
+		// find betterway to do this
+		seed := make([]byte, 4)
+		binary.BigEndian.PutUint32(seed, x2m200PingSeed)
+		// fmt.Printf("seed %x\n", seed)
+		cmd := []byte{x2m200PingCommand, seed[0], seed[1], seed[2], seed[3]}
+		// Write to framer
+		n, err := x.Write(cmd)
+		// x.w.Flush()
+		if err != nil {
+			log.Printf("Ping Write Error %v, number of bytes %d\n", err, n)
+		}
+
+		// Read from framer
+		b := make([]byte, 20)
+		n, err = x.Read(b)
+		if err != nil {
+			log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+		}
+		// for {
+		for n == 0 {
+			n, err = x.Read(b)
+			if err != nil {
+				log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+				log.Printf("bytes %x\n", b)
+			}
+			time.Sleep(time.Millisecond * 100)
+		}
+		// send response []byte back to caller
+		response <- b[:n]
+
+	}()
+
 }
 
 func isValidPingResponse(b []byte) (bool, error) {
@@ -198,6 +221,7 @@ func isValidPingResponse(b []byte) (bool, error) {
 	// x2m200PingResponseNotReady = 0xae ea ee aa
 
 	// maybe betterway to check this
+
 	resp := binary.BigEndian.Uint32(b[1:])
 	// log.Printf("const %x resp %x\n", x2m200PingResponseReady, resp)
 	if resp != x2m200PingResponseReady && resp != x2m200PingResponseNotReady {
