@@ -32,6 +32,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("serial.Open: %v", err)
 	}
+	defer port.Close()
 	x2 := xethru.Open(port)
 
 	for i := 0; i < 10; i++ {
@@ -46,6 +47,7 @@ func main() {
 
 		time.Sleep(*pingTimeout)
 	}
+
 	//
 	// appconfig := xetheu.AppConfig{
 	// 	Name:        "Resp",
