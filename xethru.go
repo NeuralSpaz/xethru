@@ -30,8 +30,8 @@ const (
 	invaidAppID  protocolError = 0x03
 )
 
-func NewReadWriter(r io.Reader, w io.Writer) framer {
-	return x2m200Frame{w: w, r: r}
+func Open(port io.ReadWriter) framer {
+	return x2m200Frame{w: port, r: port}
 }
 
 type framer interface {
@@ -257,8 +257,16 @@ type App interface {
 
 func (x x2m200Frame) LoadApp(config AppConfig) App { return SleepingApp{} }
 
-func StartApp(app App) (bool, error)         { return false, nil }
-func SetLED(app App) (bool, error)           { return false, nil }
+func StartApp(app App) (bool, error) { return false, nil }
+func SetLED(app App) (bool, error)   { return false, nil }
+
+const (
+	appCommandByte      = 0x10
+	appSet              = 0x10
+	appAck              = 0x10
+	appSetDetectionZone = 0x96a10a1c
+)
+
 func SetDetectionZone(app App) (bool, error) { return false, nil }
 func SetSensitivity(app App) (bool, error)   { return false, nil }
 
@@ -287,28 +295,53 @@ type SleepingApp struct {
 func (a SleepingApp) GetStatus() error              { return nil }
 func (a SleepingApp) Reset() error                  { return nil }
 func (a SleepingApp) String() string                { return "" }
-func (a SleepingApp) Parser(b []byte) (bool, error) { return false, nil }
+func (a SleepingApp) parser(b []byte) (bool, error) { return false, nil }
 
-type RespirationApp struct{}
+type RespirationApp struct {
+	framer
+	Status        status
+	RPM           float64
+	Distance      float64
+	SignalQuality float64
+	Movement      float64
+}
 
 func (a RespirationApp) GetStatus() error              { return nil }
 func (a RespirationApp) Reset() error                  { return nil }
 func (a RespirationApp) String() string                { return "" }
-func (a RespirationApp) Parser(b []byte) (bool, error) { return false, nil }
+func (a RespirationApp) parser(b []byte) (bool, error) { return false, nil }
 
-type PresenceApp struct{}
+type PresenceApp struct {
+	framer
+	Status        status
+	RPM           float64
+	Distance      float64
+	SignalQuality float64
+	MovementSlow  float64
+	MovementFast  float64
+}
 
 func (a PresenceApp) GetStatus() error              { return nil }
 func (a PresenceApp) Reset() error                  { return nil }
 func (a PresenceApp) String() string                { return "" }
-func (a PresenceApp) Parser(b []byte) (bool, error) { return false, nil }
+func (a PresenceApp) parser(b []byte) (bool, error) { return false, nil }
 
-type BaseBandApp struct{}
+type BaseBandApp struct {
+	framer
+	Counter           int32
+	NumOfBins         int32
+	BinLength         float64
+	SamplingFrequency float64
+	CarrierFrequency  float64
+	RangeOffset       float64
+	SigI              []float64
+	SigQ              []float64
+}
 
 func (a BaseBandApp) GetStatus() error              { return nil }
 func (a BaseBandApp) Reset() error                  { return nil }
 func (a BaseBandApp) String() string                { return "" }
-func (a BaseBandApp) Parser(b []byte) (bool, error) { return false, nil }
+func (a BaseBandApp) parser(b []byte) (bool, error) { return false, nil }
 
 //
 //

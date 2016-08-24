@@ -44,6 +44,48 @@ func x2m200ProtocolwithTransit(in []byte) ([]byte, []byte, error) {
 	return readback, transit, err
 }
 
+func newLoopBackXethru() (framer, chan []byte, chan []byte) {
+	sensorReader, clientWriter := io.Pipe()
+	clientReader, sensorWriter := io.Pipe()
+	client := x2m200Frame{clientWriter, clientReader}
+	sensor := x2m200Frame{sensorWriter, sensorReader}
+	sensorSend := make(chan []byte)
+	sensorRecive := make(chan []byte)
+
+	go func() {
+		b := make([]byte, 256)
+		n, err := sensor.Read(b)
+		if err != nil {
+			log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+		}
+		// for {
+		for n == 0 {
+			n, err = sensor.Read(b)
+			if err != nil {
+				log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+				log.Printf("bytes %x\n", b)
+			}
+		}
+		sensorRecive <- b[:n]
+
+		for {
+			select {
+			case <-time.After(time.Millisecond * 1000):
+				return
+			case p := <-sensorSend:
+				n, err = sensor.Write(p)
+				if err != nil {
+					log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+					log.Printf("bytes %x\n", b)
+				}
+			}
+		}
+
+	}()
+
+	return client, sensorSend, sensorRecive
+}
+
 func TestXethruWrite(t *testing.T) {
 
 	cases := []struct {
@@ -144,48 +186,6 @@ func TestIsValidPingResponse(t *testing.T) {
 			t.Errorf("expected %+v, got %+v", c.ok, ok)
 		}
 	}
-}
-
-func newLoopBackXethru() (framer, chan []byte, chan []byte) {
-	sensorReader, clientWriter := io.Pipe()
-	clientReader, sensorWriter := io.Pipe()
-	client := x2m200Frame{clientWriter, clientReader}
-	sensor := x2m200Frame{sensorWriter, sensorReader}
-	sensorSend := make(chan []byte)
-	sensorRecive := make(chan []byte)
-
-	go func() {
-		b := make([]byte, 256)
-		n, err := sensor.Read(b)
-		if err != nil {
-			log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
-		}
-		// for {
-		for n == 0 {
-			n, err = sensor.Read(b)
-			if err != nil {
-				log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
-				log.Printf("bytes %x\n", b)
-			}
-		}
-		sensorRecive <- b[:n]
-
-		for {
-			select {
-			case <-time.After(time.Millisecond * 1000):
-				return
-			case p := <-sensorSend:
-				n, err = sensor.Write(p)
-				if err != nil {
-					log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
-					log.Printf("bytes %x\n", b)
-				}
-			}
-		}
-
-	}()
-
-	return client, sensorSend, sensorRecive
 }
 
 func TestPing(t *testing.T) {
