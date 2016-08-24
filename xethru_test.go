@@ -13,6 +13,7 @@ import (
 	"io/ioutil"
 	"log"
 	"testing"
+	"time"
 )
 
 // testing helper
@@ -143,24 +144,16 @@ func TestIsValidPingResponse(t *testing.T) {
 	}
 }
 
-func newLoopBackXethru() framer {
-	pr, pw := io.Pipe()
-
-	return x2m200Frame{pw, pr}
-
-}
-
-func TestPing(t *testing.T) {
-
-	// Wire up sensor and client
+func newLoopBackXethru() (framer, chan []byte, chan []byte) {
 	sensorReader, clientWriter := io.Pipe()
 	clientReader, sensorWriter := io.Pipe()
 	client := x2m200Frame{clientWriter, clientReader}
 	sensor := x2m200Frame{sensorWriter, sensorReader}
+	sensorSend := make(chan []byte)
+	sensorRecive := make(chan []byte)
 
-	// setup sensor to reply
 	go func() {
-		b := make([]byte, 20)
+		b := make([]byte, 256)
 		n, err := sensor.Read(b)
 		if err != nil {
 			log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
@@ -173,19 +166,65 @@ func TestPing(t *testing.T) {
 				log.Printf("bytes %x\n", b)
 			}
 		}
-		if bytes.Contains(b, []byte{0x01, 0xee, 0xaa, 0xea, 0xae}) {
-			sensor.Write([]byte{0x01, 0xaa, 0xee, 0xae, 0xea})
+		sensorRecive <- b[:n]
+
+		for {
+			select {
+			case <-time.After(time.Millisecond * 1000):
+				return
+			case p := <-sensorSend:
+				n, err = sensor.Write(p)
+				if err != nil {
+					log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+					log.Printf("bytes %x\n", b)
+				}
+			}
 		}
+
 	}()
 
-	ok, err := client.Ping(0)
+	return client, sensorSend, sensorRecive
+}
 
-	if !ok {
-		t.Errorf("expected %+v, got %+v", true, ok)
+func TestPing(t *testing.T) {
+
+	cases := []struct {
+		ok         bool
+		err        error
+		delaymS    time.Duration
+		sensorSend []byte
+	}{
+		{true, nil, time.Millisecond * 1, []byte{0x01, 0xaa, 0xee, 0xae, 0xea}},
+		{false, nil, time.Millisecond * 1, []byte{0x01, 0xae, 0xea, 0xee, 0xaa}},
+		{false, errPingTimeout, time.Millisecond * 20, []byte{0x01, 0xaa, 0xee, 0xae, 0xea}},
+		{false, errPingDoesNotContainResponse, time.Millisecond * 1, []byte{0x01, 0x02, 0x02, 0x02, 0x02}},
+		{false, errPingNotEnoughBytes, time.Millisecond * 1, []byte{0x01, 0x02, 0x02}},
+		{false, errPingDoesNotStartWithPingCMD, time.Millisecond * 1, []byte{0x50, 0x02, 0x02, 0x02, 0x04}},
 	}
 
-	if err != nil {
-		t.Errorf("expected %+v, got %+v", nil, err)
+	for _, c := range cases {
+
+		client, sensorSend, sensorRecive := newLoopBackXethru()
+
+		go func() {
+			b := <-sensorRecive
+			time.Sleep(c.delaymS)
+			// fmt.Printf("%x", b)
+			if bytes.Contains(b, []byte{0x01, 0xee, 0xaa, 0xea, 0xae}) {
+				sensorSend <- c.sensorSend
+			}
+		}()
+
+		ok, err := client.Ping(time.Millisecond * 10)
+		log.Println(err)
+
+		if ok != c.ok {
+			t.Errorf("expected %+v, got %+v", c.ok, ok)
+		}
+
+		if err != c.err {
+			t.Errorf("expected %+v, got %+v", c.err, err)
+		}
 	}
 
 }

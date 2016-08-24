@@ -48,6 +48,7 @@ type framer interface {
 	io.Writer
 	io.Reader
 	Ping(t time.Duration) (bool, error)
+	LoadApp(config AppConfig) App
 }
 
 type x2m200Frame struct {
@@ -155,11 +156,11 @@ func (x x2m200Frame) Ping(t time.Duration) (bool, error) {
 	resp := make(chan []byte)
 	x.ping(resp)
 	if t == 0 {
-		t = time.Second
+		t = time.Millisecond * 100
 	}
 	select {
 	case <-time.After(t):
-		return false, errors.New("ping timeout")
+		return false, errPingTimeout
 	case r := <-resp:
 		ok, err := isValidPingResponse(r)
 		return ok, err
@@ -168,6 +169,8 @@ func (x x2m200Frame) Ping(t time.Duration) (bool, error) {
 	return false, nil
 
 }
+
+var errPingTimeout = errors.New("ping timeout")
 
 func (x x2m200Frame) ping(response chan []byte) {
 	// response := make(chan []byte)
@@ -240,8 +243,54 @@ func isValidPingResponse(b []byte) (bool, error) {
 }
 
 var errPingDoesNotContainResponse = errors.New("ping response does not contain a valid ping response")
-var errPingNotEnoughBytes = errors.New("ping response does not contain a valid ping response")
+var errPingNotEnoughBytes = errors.New("ping response does not contain correct number of bytes")
 var errPingDoesNotStartWithPingCMD = errors.New("ping response does not start with ping response start byte")
+
+type AppConfig struct {
+	Name        string
+	ZoneStart   float64
+	ZoneEnd     float64
+	LEDMode     string
+	Sensitivity float64
+	Output      io.Writer
+	parser      func()
+}
+
+type App interface {
+	GetStatus() error
+	Reset() error
+	Parser([]byte) (bool, error)
+}
+
+func (x x2m200Frame) LoadApp(config AppConfig) App { return SleepingApp{} }
+
+type SleepingApp struct{}
+
+func (a SleepingApp) GetStatus() error              { return nil }
+func (a SleepingApp) Reset() error                  { return nil }
+func (a SleepingApp) String() string                { return "" }
+func (a SleepingApp) Parser(b []byte) (bool, error) { return false, nil }
+
+type RespirationApp struct{}
+
+func (a RespirationApp) GetStatus() error              { return nil }
+func (a RespirationApp) Reset() error                  { return nil }
+func (a RespirationApp) String() string                { return "" }
+func (a RespirationApp) Parser(b []byte) (bool, error) { return false, nil }
+
+type PresenceApp struct{}
+
+func (a PresenceApp) GetStatus() error              { return nil }
+func (a PresenceApp) Reset() error                  { return nil }
+func (a PresenceApp) String() string                { return "" }
+func (a PresenceApp) Parser(b []byte) (bool, error) { return false, nil }
+
+type BaseBandApp struct{}
+
+func (a BaseBandApp) GetStatus() error              { return nil }
+func (a BaseBandApp) Reset() error                  { return nil }
+func (a BaseBandApp) String() string                { return "" }
+func (a BaseBandApp) Parser(b []byte) (bool, error) { return false, nil }
 
 //
 //
