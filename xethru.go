@@ -21,28 +21,20 @@ const (
 	startByte = 0x7D
 	endByte   = 0x7E
 	escByte   = 0x7F
+	errorByte = 0x20
 )
 
-// type x2m200Framer struct {
-// 	x2m200FrameWriter
-// 	x2m200FrameReader
-// 	// x2m200FrameCloser
-// }
+type protocolError byte
 
-//
+const (
+	NotReconsied protocolError = 0x01
+	CRCfailed    protocolError = 0x02
+	InvaidAppID  protocolError = 0x03
+)
+
 func NewReadWriter(r io.Reader, w io.Writer) framer {
-	// if model == "x2m200" {
-	// return x2m200Framer{x2m200FrameWriter{w}, x2m200FrameReader{r}, x2m200FrameCloser{nil}}
 	return x2m200Frame{w: w, r: r}
-
-	// }
 }
-
-// func NewReadWriteCloser(rwc io.ReadWriteCloser) io.ReadWriteCloser {
-// 	// if model == "x2m200" {
-// 	return &x2m200Framer{x2m200FrameWriter{rwc}, x2m200FrameReader{rwc}, x2m200FrameCloser{rwc}}
-// 	// }
-// }
 
 type framer interface {
 	io.Writer
@@ -99,16 +91,26 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 		// check crcbyte
 		crc, err := checksum(&b)
 		if err != nil {
-			return 0, ErrorPacketNoStartByte
+			return n, ErrorPacketNoStartByte
 		}
 		if crcByte != crc {
-			return 0, ErrorPacketBadCRC
+			return n, ErrorPacketBadCRC
 		}
 		// delete startByte
 		b = b[:0+copy(b[0:], b[1:])]
-		// for i := 0; i < n; i++ {
-		// 	fmt.Println(i)
-		// }
+
+		// check for errors byte
+		if b[0] == errorByte {
+			switch protocolError(b[1]) {
+			case NotReconsied:
+				return n, ProtocolErrorNotReconsied
+			case CRCfailed:
+				return n, ProtocolErrorCRCfailed
+			case InvaidAppID:
+				return n, ProtocolErrorInvaidAppID
+			}
+		}
+
 		n--
 		if n == 0 {
 			return n, io.EOF
@@ -122,9 +124,12 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 }
 
 var (
-	ErrorPacketNoStartByte = errors.New("no startbyte")
-	ErrorPacketNotEndbyte  = errors.New("does not end with endbyte")
-	ErrorPacketBadCRC      = errors.New("failed checksum")
+	ErrorPacketNoStartByte    = errors.New("no startbyte")
+	ErrorPacketNotEndbyte     = errors.New("does not end with endbyte")
+	ErrorPacketBadCRC         = errors.New("failed checksum")
+	ProtocolErrorNotReconsied = errors.New("protocol error command not reconsied")
+	ProtocolErrorCRCfailed    = errors.New("protocol error command bad crc")
+	ProtocolErrorInvaidAppID  = errors.New("protocol error invalid app id")
 )
 
 // Calculated by XOR’ing all bytes from <START> + [Data].
@@ -194,7 +199,7 @@ func (x x2m200Frame) ping(response chan []byte) {
 		if err != nil {
 			log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
 		}
-		// for {
+		// retry
 		for n == 0 {
 			n, err = x.Read(b)
 			if err != nil {
@@ -219,27 +224,17 @@ func isValidPingResponse(b []byte) (bool, error) {
 	if b[0] != x2m200PingCommand {
 		return false, errPingDoesNotStartWithPingCMD
 	}
-	// check for valid response
-	// x2m200PingResponseReady 0xaa ee ae ea
-	// x2m200PingResponseNotReady = 0xae ea ee aa
-
-	// maybe betterway to check this
-
+	// check for valid response first striping off startByte
 	resp := binary.BigEndian.Uint32(b[1:])
-	// log.Printf("const %x resp %x\n", x2m200PingResponseReady, resp)
-	if resp != x2m200PingResponseReady && resp != x2m200PingResponseNotReady {
+	switch resp {
+	case x2m200PingResponseNotReady:
+		return false, nil
+	case x2m200PingResponseReady:
+		return true, nil
+	default:
 		return false, errPingDoesNotContainResponse
 	}
 
-	if resp == x2m200PingResponseNotReady {
-		return false, nil
-	}
-
-	if resp == x2m200PingResponseReady {
-		return true, nil
-	}
-
-	return false, errors.New("somthing went wrong")
 }
 
 var errPingDoesNotContainResponse = errors.New("ping response does not contain a valid ping response")
@@ -264,7 +259,32 @@ type App interface {
 
 func (x x2m200Frame) LoadApp(config AppConfig) App { return SleepingApp{} }
 
-type SleepingApp struct{}
+func StartApp(app App) (bool, error)         { return false, nil }
+func SetLED(app App) (bool, error)           { return false, nil }
+func SetDetectionZone(app App) (bool, error) { return false, nil }
+func SetSensitivity(app App) (bool, error)   { return false, nil }
+
+type status int
+
+const (
+	Breathing status = iota
+	Movement
+	Tracking
+	NoMovement
+	Initializing
+	Reserved
+	Unknown
+)
+
+type SleepingApp struct {
+	framer
+	Status        status
+	RPM           float64
+	Distance      float64
+	SignalQuality float64
+	MovementSlow  float64
+	MovementFast  float64
+}
 
 func (a SleepingApp) GetStatus() error              { return nil }
 func (a SleepingApp) Reset() error                  { return nil }
