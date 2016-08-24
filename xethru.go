@@ -1,9 +1,7 @@
-// xethru  Copyright (C) 2016
-// This work is copyright no part may be reproduced by any process,
-// nor may any other exclusive right be exercised, without the permission of
-// NeuralSpaz aka Josh Gardiner 2016
-// It is my intent that this will be released as open source at some
-// future time. If you would like to contribute please contact me.
+// Copyright © 2016 Josh Gardiner aka NeuralSpaz on github.com
+//
+// This file is part of Xethru-Go - A Golang library for the xethru modules
+//
 
 package xethru
 
