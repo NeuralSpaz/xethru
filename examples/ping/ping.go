@@ -16,7 +16,7 @@ import (
 func main() {
 	log.Println("X2M200 Ping Demo")
 	commPort := flag.String("commPort", "/dev/ttyUSB0", "the comm port you wish to use")
-	baudrate := flag.Uint("baudrate", 915000, "the baud rate for the comm port you wish to use")
+	baudrate := flag.Uint("baudrate", 115200, "the baud rate for the comm port you wish to use")
 	pingTimeout := flag.Duration("pingTimeout", time.Millisecond*300, "timeout for ping command")
 	flag.Parse()
 
@@ -34,14 +34,18 @@ func main() {
 	}
 	x2 := xethru.Open(port)
 
-	ok, err := x2.Ping(*pingTimeout)
-	if err != nil {
-		log.Fatalf("Error Communicating with Device: %v", err)
+	for i := 0; i < 10; i++ {
+		ok, err := x2.Ping(*pingTimeout)
+		if err != nil {
+			log.Fatalf("Error Communicating with Device: %v", err)
+		}
+		if !ok {
+			log.Fatal("Device Not Ready")
+		}
+		log.Println("Got Pong")
+
+		time.Sleep(*pingTimeout)
 	}
-	if !ok {
-		log.Fatal("Device Not Ready")
-	}
-	log.Println("Got Pong")
 	//
 	// appconfig := xetheu.AppConfig{
 	// 	Name:        "Resp",
