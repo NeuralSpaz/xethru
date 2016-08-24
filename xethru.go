@@ -25,9 +25,9 @@ const (
 type protocolError byte
 
 const (
-	NotReconsied protocolError = 0x01
-	CRCfailed    protocolError = 0x02
-	InvaidAppID  protocolError = 0x03
+	notReconsied protocolError = 0x01
+	crcFailed    protocolError = 0x02
+	invaidAppID  protocolError = 0x03
 )
 
 func NewReadWriter(r io.Reader, w io.Writer) framer {
@@ -72,7 +72,7 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 		last, b = b[n-1], b[:n-1]
 		n--
 		if last != endByte {
-			return n, ErrorPacketNotEndbyte
+			return n, errorPacketNotEndbyte
 		}
 		// pop crcByte to check later
 		var crcByte byte
@@ -89,10 +89,10 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 		// check crcbyte
 		crc, err := checksum(&b)
 		if err != nil {
-			return n, ErrorPacketNoStartByte
+			return n, errorPacketNoStartByte
 		}
 		if crcByte != crc {
-			return n, ErrorPacketBadCRC
+			return n, errorPacketBadCRC
 		}
 		// delete startByte
 		b = b[:0+copy(b[0:], b[1:])]
@@ -100,12 +100,12 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 		// check for errors byte
 		if b[0] == errorByte {
 			switch protocolError(b[1]) {
-			case NotReconsied:
-				return n, ProtocolErrorNotReconsied
-			case CRCfailed:
-				return n, ProtocolErrorCRCfailed
-			case InvaidAppID:
-				return n, ProtocolErrorInvaidAppID
+			case notReconsied:
+				return n, protocolErrorNotReconsied
+			case crcFailed:
+				return n, protocolErrorCRCfailed
+			case invaidAppID:
+				return n, protocolErrorInvaidAppID
 			}
 		}
 
@@ -122,12 +122,12 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 }
 
 var (
-	ErrorPacketNoStartByte    = errors.New("no startbyte")
-	ErrorPacketNotEndbyte     = errors.New("does not end with endbyte")
-	ErrorPacketBadCRC         = errors.New("failed checksum")
-	ProtocolErrorNotReconsied = errors.New("protocol error command not reconsied")
-	ProtocolErrorCRCfailed    = errors.New("protocol error command bad crc")
-	ProtocolErrorInvaidAppID  = errors.New("protocol error invalid app id")
+	errorPacketNoStartByte    = errors.New("no startbyte")
+	errorPacketNotEndbyte     = errors.New("does not end with endbyte")
+	errorPacketBadCRC         = errors.New("failed checksum")
+	protocolErrorNotReconsied = errors.New("protocol error command not reconsied")
+	protocolErrorCRCfailed    = errors.New("protocol error command bad crc")
+	protocolErrorInvaidAppID  = errors.New("protocol error invalid app id")
 )
 
 // Calculated by XOR’ing all bytes from <START> + [Data].
@@ -252,7 +252,7 @@ type AppConfig struct {
 type App interface {
 	GetStatus() error
 	Reset() error
-	Parser([]byte) (bool, error)
+	parser([]byte) (bool, error)
 }
 
 func (x x2m200Frame) LoadApp(config AppConfig) App { return SleepingApp{} }
@@ -265,13 +265,13 @@ func SetSensitivity(app App) (bool, error)   { return false, nil }
 type status int
 
 const (
-	Breathing status = iota
-	Movement
-	Tracking
-	NoMovement
-	Initializing
-	Reserved
-	Unknown
+	breathing status = iota
+	movement
+	tracking
+	noMovement
+	initializing
+	reserved
+	unknown
 )
 
 type SleepingApp struct {
