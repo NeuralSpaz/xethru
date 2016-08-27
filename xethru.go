@@ -52,7 +52,11 @@ func Open(device string, port io.ReadWriter) Framer {
 	} else {
 		return port
 	}
+}
 
+// CreateSplitReadWriter Used help with testing Framer
+func CreateSplitReadWriter(w io.Writer, r io.Reader) Framer {
+	return x2m200Frame{w: w, r: r}
 }
 
 // Framer is a wrapper for a serial protocol. it insets the start, crc and end bytes for you
