@@ -16,6 +16,7 @@
 // THE SOFTWARE.
 
 // Ping tests
+
 package xethru
 
 import (

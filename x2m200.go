@@ -15,7 +15,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// Xethru-GO a driver for the xethru sensor modules
+// Xethru-GO is a open source implementation driver for xethru sensor modules.
+// The current state of this library is still unstable and under active development.
+// Contributions are welcome.
+// To use with the X2M200 module you will first need to create a
+// serial io.ReadWriter (there is an examples in the example dir)
+// then you can use Open to create a new x2m200 device that
+// will handle all the start, end, crc and escaping for you.
 package xethru
 
 import (
