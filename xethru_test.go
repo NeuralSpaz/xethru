@@ -44,7 +44,7 @@ func x2m200ProtocolwithTransit(in []byte) ([]byte, []byte, error) {
 	return readback, transit, err
 }
 
-func newLoopBackXethru() (framer, chan []byte, chan []byte) {
+func newLoopBackXethru() (Framer, chan []byte, chan []byte) {
 	sensorReader, clientWriter := io.Pipe()
 	clientReader, sensorWriter := io.Pipe()
 	client := x2m200Frame{clientWriter, clientReader}
@@ -144,6 +144,7 @@ func TestXethruRead(t *testing.T) {
 		{[]byte{0x01, 0x02, 0x03}, protocolErrorNotReconsied, []byte{0x7d, 0x20, 0x01, 0x5c, 0x7e}},
 		{[]byte{0x01, 0x02, 0x03}, protocolErrorCRCfailed, []byte{0x7d, 0x20, 0x02, 0x5f, 0x7e}},
 		{[]byte{0x01, 0x02, 0x03}, protocolErrorInvaidAppID, []byte{0x7d, 0x20, 0x03, 0x5e, 0x7e}},
+		{[]byte{}, nil, []byte{0x7d, 0x7d, 0x7e}},
 	}
 
 	for _, c := range cases {
@@ -163,117 +164,3 @@ func TestXethruRead(t *testing.T) {
 		}
 	}
 }
-
-func TestIsValidPingResponse(t *testing.T) {
-	cases := []struct {
-		b   []byte
-		err error
-		ok  bool
-	}{
-		{[]byte{0x01}, errPingNotEnoughBytes, false},
-		{[]byte{0x02, 0x00, 0x00, 0x00, 0x00}, errPingDoesNotStartWithPingCMD, false},
-		{[]byte{0x01, 0x01, 0x02, 0x03, 0x04}, errPingDoesNotContainResponse, false},
-		{[]byte{0x01, 0xae, 0xea, 0xee, 0xaa}, nil, false},
-		{[]byte{0x01, 0xaa, 0xee, 0xae, 0xea}, nil, true},
-	}
-	for _, c := range cases {
-		ok, err := isValidPingResponse(c.b)
-
-		if err != c.err {
-			t.Errorf("expected %+v, got %+v", c.err, err)
-		}
-		if ok != c.ok {
-			t.Errorf("expected %+v, got %+v", c.ok, ok)
-		}
-	}
-}
-
-func TestPing(t *testing.T) {
-
-	cases := []struct {
-		ok         bool
-		err        error
-		delaymS    time.Duration
-		sensorSend []byte
-	}{
-		{true, nil, time.Millisecond * 1, []byte{0x01, 0xaa, 0xee, 0xae, 0xea}},
-		{false, nil, time.Millisecond * 1, []byte{0x01, 0xae, 0xea, 0xee, 0xaa}},
-		{false, errPingTimeout, time.Millisecond * 4, []byte{0x01, 0xaa, 0xee, 0xae, 0xea}},
-		{false, errPingDoesNotContainResponse, time.Millisecond * 1, []byte{0x01, 0x02, 0x02, 0x02, 0x02}},
-		{false, errPingNotEnoughBytes, time.Millisecond * 1, []byte{0x01, 0x02, 0x02}},
-		{false, errPingDoesNotStartWithPingCMD, time.Millisecond * 1, []byte{0x50, 0x02, 0x02, 0x02, 0x04}},
-	}
-
-	for _, c := range cases {
-
-		client, sensorSend, sensorRecive := newLoopBackXethru()
-
-		go func() {
-			b := <-sensorRecive
-			time.Sleep(c.delaymS)
-			// fmt.Printf("%x", b)
-			if bytes.Contains(b, []byte{0x01, 0xee, 0xaa, 0xea, 0xae}) {
-				sensorSend <- c.sensorSend
-			}
-		}()
-
-		ok, err := client.Ping(time.Millisecond * 2)
-
-		if ok != c.ok {
-			t.Errorf("expected %+v, got %+v", c.ok, ok)
-		}
-
-		if err != c.err {
-			t.Errorf("expected %+v, got %+v", c.err, err)
-		}
-	}
-
-}
-
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
