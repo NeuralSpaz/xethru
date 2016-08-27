@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+
+SHELL=/bin/bash
+
+all:
+	GOARCH=amd64 GOOS=linux go build -o xethru-sleep-linux-64 .
+	gzip --best xethru-sleep-linux-64
+	GOARCH=amd64 GOOS=windows go build -o xethru-sleep-windows-64.exe .
+	gzip --best xethru-sleep-windows-64.exe
+	GOARCH=amd64 GOOS=darwin go build -o xethru-sleep-mac-64 .
+	gzip --best xethru-sleep-mac-64
+	GOARCH=386 GOOS=linux go build -o xethru-sleep-linux-32 .
+	gzip --best xethru-sleep-linux-32
+	GOARCH=386 GOOS=windows go build -o xethru-sleep-windows-32.exe .
+	gzip --best xethru-sleep-windows-32.exe
+
+
+clean:
+	rm xethru-sleep-*
