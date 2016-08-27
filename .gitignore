@@ -29,3 +29,4 @@ _testmain.go
 *.zip
 *.gz
 dumpfile
+examples/ping/ping
