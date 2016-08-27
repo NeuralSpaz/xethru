@@ -61,48 +61,6 @@ func x2m200ProtocolwithTransit(in []byte) ([]byte, []byte, error) {
 	return readback, transit, err
 }
 
-func newLoopBackXethru() (Framer, chan []byte, chan []byte) {
-	sensorReader, clientWriter := io.Pipe()
-	clientReader, sensorWriter := io.Pipe()
-	client := x2m200Frame{clientWriter, clientReader}
-	sensor := x2m200Frame{sensorWriter, sensorReader}
-	sensorSend := make(chan []byte)
-	sensorRecive := make(chan []byte)
-
-	go func() {
-		b := make([]byte, 256)
-		n, err := sensor.Read(b)
-		if err != nil {
-			log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
-		}
-		// for {
-		for n == 0 {
-			n, err = sensor.Read(b)
-			if err != nil {
-				log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
-				log.Printf("bytes %x\n", b)
-			}
-		}
-		sensorRecive <- b[:n]
-
-		for {
-			select {
-			case <-time.After(time.Millisecond * 1000):
-				return
-			case p := <-sensorSend:
-				n, err = sensor.Write(p)
-				if err != nil {
-					log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
-					log.Printf("bytes %x\n", b)
-				}
-			}
-		}
-
-	}()
-
-	return client, sensorSend, sensorRecive
-}
-
 func TestXethruWrite(t *testing.T) {
 
 	cases := []struct {
@@ -180,4 +138,164 @@ func TestXethruRead(t *testing.T) {
 			}
 		}
 	}
+}
+
+func newLoopBackXethru() (Framer, chan []byte, chan []byte) {
+	sensorReader, clientWriter := io.Pipe()
+	clientReader, sensorWriter := io.Pipe()
+	client := CreateSplitReadWriter(clientWriter, clientReader)
+	sensor := CreateSplitReadWriter(sensorWriter, sensorReader)
+
+	sensorSend := make(chan []byte)
+	sensorRecive := make(chan []byte)
+
+	go func() {
+		b := make([]byte, 256)
+		n, err := sensor.Read(b)
+		if err != nil {
+			log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+		}
+		// for {
+		for n == 0 {
+			n, err = sensor.Read(b)
+			if err != nil {
+				log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+				log.Printf("bytes %x\n", b)
+			}
+		}
+		// log.Printf("sensorRecive %x\n", b[:n])
+		sensorRecive <- b[:n]
+
+		for {
+			select {
+			case <-time.After(time.Millisecond * 1000):
+				return
+			case p := <-sensorSend:
+				n, err = sensor.Write(p)
+				if err != nil {
+					log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+					log.Printf("bytes %x\n", b)
+				}
+			}
+		}
+
+	}()
+
+	return client, sensorSend, sensorRecive
+}
+
+func TestIsValidPingResponse(t *testing.T) {
+	cases := []struct {
+		b   []byte
+		err error
+		ok  bool
+	}{
+		{[]byte{0x01}, errPingNotEnoughBytes, false},
+		{[]byte{0x02, 0x00, 0x00, 0x00, 0x00}, errPingDoesNotStartWithPingCMD, false},
+		{[]byte{0x01, 0x01, 0x02, 0x03, 0x04}, errPingDoesNotContainResponse, false},
+		{[]byte{0x01, 0xae, 0xea, 0xee, 0xaa}, nil, false},
+		{[]byte{0x01, 0xaa, 0xee, 0xae, 0xea}, nil, true},
+	}
+	for _, c := range cases {
+		ok, err := isValidPingResponse(c.b)
+
+		if err != c.err {
+			t.Errorf("expected %+v, got %+v", c.err, err)
+		}
+		if ok != c.ok {
+			t.Errorf("expected %+v, got %+v", c.ok, ok)
+		}
+	}
+}
+
+func TestPing(t *testing.T) {
+
+	cases := []struct {
+		ok         bool
+		err        error
+		delaymS    time.Duration
+		sensorSend []byte
+		timeout    time.Duration
+	}{
+		{true, nil, time.Millisecond * 1, []byte{0x01, 0xaa, 0xee, 0xae, 0xea}, time.Millisecond * 2},
+		{true, nil, time.Millisecond * 1, []byte{0x01, 0xaa, 0xee, 0xae, 0xea}, 0},
+		{false, nil, time.Millisecond * 1, []byte{0x01, 0xae, 0xea, 0xee, 0xaa}, time.Millisecond * 2},
+		{false, errPingTimeout, time.Millisecond * 4, []byte{0x01, 0xaa, 0xee, 0xae, 0xea}, time.Millisecond * 2},
+		{false, errPingDoesNotContainResponse, time.Millisecond * 1, []byte{0x01, 0x02, 0x02, 0x02, 0x02}, time.Millisecond * 2},
+		{false, errPingNotEnoughBytes, time.Millisecond * 1, []byte{0x01, 0x02, 0x02}, time.Millisecond * 2},
+		{false, errPingDoesNotStartWithPingCMD, time.Millisecond * 1, []byte{0x50, 0x02, 0x02, 0x02, 0x04}, time.Millisecond * 2},
+	}
+
+	for _, c := range cases {
+
+		client, sensorSend, sensorRecive := newLoopBackXethru()
+
+		go func() {
+			b := <-sensorRecive
+			time.Sleep(c.delaymS)
+			// fmt.Printf("%x", b)
+			if bytes.Contains(b, []byte{0x01, 0xee, 0xaa, 0xea, 0xae}) {
+				sensorSend <- c.sensorSend
+			}
+		}()
+
+		ok, err := client.Ping(c.timeout)
+
+		if ok != c.ok {
+			t.Errorf("expected %+v, got %+v", c.ok, ok)
+		}
+
+		if err != c.err {
+			t.Errorf("expected %+v, got %+v", c.err, err)
+		}
+	}
+
+}
+
+func TestReset(t *testing.T) {
+
+	cases := []struct {
+		sensorRX  []byte
+		sensorTX1 []byte
+		sensorTX2 []byte
+		sensorTX3 []byte
+		delay     time.Duration
+		ok        bool
+		err       error
+	}{
+		{[]byte{resetCmd}, []byte{resetAck}, []byte{systemMesg, systemBooting}, []byte{systemMesg, systemReady}, time.Millisecond, true, nil},
+		{[]byte{resetCmd}, []byte{resetAck}, []byte{systemMesg, systemBooting}, []byte{systemMesg, systemReady}, time.Millisecond * 5, false, errResetTimeout},
+		{[]byte{resetCmd}, []byte{systemMesg, systemReady}, []byte{}, []byte{}, time.Millisecond, true, nil},
+		{[]byte{resetCmd}, []byte{0x01, 0x02}, []byte{}, []byte{}, time.Millisecond, false, errResetTimeout},
+	}
+
+	for _, c := range cases {
+
+		client, sensorSend, sensorRecive := newLoopBackXethru()
+
+		go func() {
+			b := <-sensorRecive
+			time.Sleep(c.delay)
+			// fmt.Printf("%x", b)
+			if bytes.Contains(b, c.sensorRX) {
+				sensorSend <- c.sensorTX1
+				time.Sleep(c.delay)
+				sensorSend <- c.sensorTX2
+				time.Sleep(c.delay)
+				sensorSend <- c.sensorTX3
+				time.Sleep(c.delay)
+			}
+		}()
+
+		ok, err := client.Reset(time.Millisecond * 2)
+
+		if ok != c.ok {
+			t.Errorf("expected %+v, got %+v", c.ok, ok)
+		}
+
+		if err != c.err {
+			t.Errorf("expected %+v, got %+v", c.err, err)
+		}
+	}
+
 }

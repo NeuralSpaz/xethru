@@ -23,8 +23,12 @@
 package xethru
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"io"
+	"log"
+	"time"
 )
 
 // Flow Control bytes
@@ -50,7 +54,7 @@ func Open(device string, port io.ReadWriter) Framer {
 	if device == "x2m200" {
 		return x2m200Frame{w: port, r: port}
 	} else {
-		return port
+		return x2m200Frame{w: port, r: port}
 	}
 }
 
@@ -63,7 +67,14 @@ func CreateSplitReadWriter(w io.Writer, r io.Reader) Framer {
 type Framer interface {
 	io.Writer
 	io.Reader
-	// Ping(t time.Duration) (bool, error)
+	Ping(t time.Duration) (bool, error)
+	Reset(t time.Duration) (bool, error)
+}
+
+type App interface {
+	Load() (bool, error)
+	Set() (bool, error)
+	Exec() (bool, error)
 }
 
 type x2m200Frame struct {
@@ -169,3 +180,179 @@ func checksum(p *[]byte) (byte, error) {
 }
 
 var errChecksumInvalidPacketSTART = errors.New("invalid packet missing start")
+
+const (
+	x2m200PingCommand          = 0x01
+	x2m200PingSeed             = 0xeeaaeaae
+	x2m200PingResponseReady    = 0xaaeeaeea
+	x2m200PingResponseNotReady = 0xaeeaeeaa
+)
+
+func (x x2m200Frame) Ping(t time.Duration) (bool, error) {
+	resp := make(chan []byte)
+	x.ping(resp)
+	if t == 0 {
+		t = time.Millisecond * 100
+	}
+	select {
+	case <-time.After(t):
+
+	case r := <-resp:
+		ok, err := isValidPingResponse(r)
+		return ok, err
+	}
+
+	return false, errPingTimeout
+
+}
+
+//
+var errPingTimeout = errors.New("ping timeout")
+
+//
+func (x x2m200Frame) ping(response chan []byte) {
+	go func() {
+		// build ping command
+		// find betterway to do this
+		seed := make([]byte, 4)
+		binary.BigEndian.PutUint32(seed, x2m200PingSeed)
+		// fmt.Printf("seed %x\n", seed)
+		cmd := []byte{x2m200PingCommand, seed[0], seed[1], seed[2], seed[3]}
+		// Write to Framer
+		n, err := x.Write(cmd)
+		// x.w.Flush()
+		if err != nil {
+			log.Printf("Ping Write Error %v, number of bytes %d\n", err, n)
+		}
+
+		// Read from Framer
+		b := make([]byte, 20)
+		n, err = x.Read(b)
+		if err != nil {
+			log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+		}
+		// retry
+		for n == 0 {
+			n, err = x.Read(b)
+			if err != nil {
+				log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+				log.Printf("bytes %x\n", b)
+			}
+		}
+		// send response []byte back to caller
+		response <- b[:n]
+
+	}()
+
+}
+
+//
+func isValidPingResponse(b []byte) (bool, error) {
+	// check response length is
+	if len(b) != 5 {
+		return false, errPingNotEnoughBytes
+	}
+	// Check response starts with Ping Byte
+	if b[0] != x2m200PingCommand {
+		return false, errPingDoesNotStartWithPingCMD
+	}
+	// check for valid response first striping off startByte
+	resp := binary.BigEndian.Uint32(b[1:])
+	switch resp {
+	case x2m200PingResponseNotReady:
+		return false, nil
+	case x2m200PingResponseReady:
+		return true, nil
+	default:
+		return false, errPingDoesNotContainResponse
+	}
+}
+
+//
+var errPingDoesNotContainResponse = errors.New("ping response does not contain a valid ping response")
+var errPingNotEnoughBytes = errors.New("ping response does not contain correct number of bytes")
+var errPingDoesNotStartWithPingCMD = errors.New("ping response does not start with ping response start byte")
+
+const (
+	resetCmd      = 0x22
+	resetAck      = 0x10
+	systemMesg    = 0x30
+	systemBooting = 0x10
+	systemReady   = 0x11
+)
+
+func (x x2m200Frame) Reset(t time.Duration) (bool, error) {
+	//TODO pullout comms timeouts to flags with sensible defaults
+	if t == 0 {
+		t = time.Millisecond * 100
+	}
+	response := make(chan []byte)
+	done := make(chan bool)
+	n, err := x.Write([]byte{resetCmd})
+
+	if err != nil {
+		log.Printf("Ping Write Error %v, number of bytes %d\n", err, n)
+	}
+	go func() {
+		for {
+
+			// for _ := range done {
+			b := make([]byte, 20)
+			n, err = x.Read(b)
+			if err != nil {
+				log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+			}
+			// send response []byte back to caller
+			response <- b[:n]
+			d := <-done
+			if d {
+				close(done)
+				return
+			}
+
+		}
+	}()
+
+	for {
+		select {
+		case <-time.After(t):
+			return false, errResetTimeout
+		case resp := <-response:
+			ok, err := isValidResetResponse(resp)
+			if err != nil {
+				log.Printf("Error: %v, response: %x\n", err, resp)
+			}
+			if ok && err == nil {
+				done <- true
+				close(response)
+				return true, nil
+			}
+			done <- false
+		}
+	}
+
+}
+
+var errResetTimeout = errors.New("reset timeout")
+
+func isValidResetResponse(b []byte) (bool, error) {
+	if len(b) == 0 {
+		return false, errResetNotEnoughBytes
+	}
+	if bytes.Contains(b, []byte{systemMesg, systemReady}) {
+		log.Println("System Ready")
+		return true, nil
+	}
+	if bytes.Contains(b, []byte{systemMesg, systemBooting}) {
+		log.Println("System Booting")
+		return false, nil
+	}
+	if b[0] == resetAck {
+		log.Println("Reset command confirmed")
+		return false, nil
+	}
+	return false, errResetResponseError
+}
+
+var errResetNotEnoughBytes = errors.New("reset not enough bytes in response")
+var errResetResponseError = errors.New("reset did not contain a correct response")
