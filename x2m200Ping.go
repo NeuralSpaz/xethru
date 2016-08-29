@@ -15,8 +15,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// Ping
-
 package xethru
 
 import (
@@ -33,6 +31,9 @@ const (
 	x2m200PingResponseNotReady = 0xaeeaeeaa
 )
 
+// Ping send the xethru ping command and will wait for the timeout to expire
+// before closing and returning an error, It is Recommended that you Reset or
+// panic if a Ping fails
 func (x x2m200Frame) Ping(t time.Duration) (bool, error) {
 	resp := make(chan []byte)
 	x.ping(resp)
@@ -51,10 +52,8 @@ func (x x2m200Frame) Ping(t time.Duration) (bool, error) {
 
 }
 
-//
 var errPingTimeout = errors.New("ping timeout")
 
-//
 func (x x2m200Frame) ping(response chan []byte) {
 	go func() {
 		// build ping command

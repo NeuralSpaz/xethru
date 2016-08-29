@@ -15,7 +15,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// Xethru-GO is a open source implementation driver for xethru sensor modules.
+// Package xethru a open source implementation driver for xethru sensor modules.
 // The current state of this library is still unstable and under active development.
 // Contributions are welcome.
 // To use with the X2M200 module you will first need to create a
@@ -78,7 +78,7 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 		last, b = b[n-1], b[:n-1]
 		n--
 		if last != endByte {
-			return n, errorPacketNotEndbyte
+			return n, errPacketNotEndbyte
 		}
 
 		// pop crcByte to check later
@@ -94,12 +94,12 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 			}
 		}
 		// check crcbyte
-		crc, err := checksum(&b)
-		if err != nil {
-			return n, errorPacketNoStartByte
+		crc, crcerr := checksum(&b)
+		if crcerr != nil {
+			return n, errPacketNoStartByte
 		}
 		if crcByte != crc {
-			return n, errorPacketBadCRC
+			return n, errPacketBadCRC
 		}
 		// delete startByte
 		b = b[:0+copy(b[0:], b[1:])]
@@ -108,11 +108,11 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 		if b[0] == errorByte {
 			switch protocolError(b[1]) {
 			case notReconsied:
-				return n, protocolErrorNotReconsied
+				return n, errProtocolErrorNotReconsied
 			case crcFailed:
-				return n, protocolErrorCRCfailed
+				return n, errProtocolErrorCRCfailed
 			case invaidAppID:
-				return n, protocolErrorInvaidAppID
+				return n, errProtocolErrorInvaidAppID
 			}
 		}
 		return n, nil
@@ -124,12 +124,12 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 }
 
 var (
-	errorPacketNoStartByte    = errors.New("no startbyte")
-	errorPacketNotEndbyte     = errors.New("does not end with endbyte")
-	errorPacketBadCRC         = errors.New("failed checksum")
-	protocolErrorNotReconsied = errors.New("protocol error command not reconsied")
-	protocolErrorCRCfailed    = errors.New("protocol error command bad crc")
-	protocolErrorInvaidAppID  = errors.New("protocol error invalid app id")
+	errPacketNoStartByte         = errors.New("no startbyte")
+	errPacketNotEndbyte          = errors.New("does not end with endbyte")
+	errPacketBadCRC              = errors.New("failed checksum")
+	errProtocolErrorNotReconsied = errors.New("protocol error command not reconsied")
+	errProtocolErrorCRCfailed    = errors.New("protocol error command bad crc")
+	errProtocolErrorInvaidAppID  = errors.New("protocol error invalid app id")
 )
 
 // Calculated by XOR’ing all bytes from <START> + [Data].

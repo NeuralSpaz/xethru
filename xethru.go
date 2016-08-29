@@ -29,9 +29,9 @@ import (
 func Open(device string, port io.ReadWriter) Framer {
 	if device == "x2m200" {
 		return x2m200Frame{w: port, r: port}
-	} else {
-		return x2m200Frame{w: port, r: port}
 	}
+	return x2m200Frame{w: port, r: port}
+
 }
 
 // Framer is a wrapper for a serial protocol. it insets the start, crc and end bytes for you
@@ -42,7 +42,8 @@ type Framer interface {
 	Reset(t time.Duration) (bool, error)
 }
 
-type App interface {
+// Apper an app should have a config struct
+type Apper interface {
 	Load() (bool, error)
 	Set() (bool, error)
 	Exec() (bool, error)

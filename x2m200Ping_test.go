@@ -70,6 +70,8 @@ func TestPing(t *testing.T) {
 	for _, c := range cases {
 
 		client, sensorSend, sensorRecive := newLoopBackXethru()
+		defer close(sensorSend)
+		defer close(sensorRecive)
 
 		go func() {
 			b := <-sensorRecive
