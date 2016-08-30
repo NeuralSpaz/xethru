@@ -41,10 +41,3 @@ type Framer interface {
 	Ping(t time.Duration) (bool, error)
 	Reset(t time.Duration) (bool, error)
 }
-
-// Apper an app should have a config struct
-type Apper interface {
-	Load() (bool, error)
-	Set() (bool, error)
-	Exec() (bool, error)
-}

@@ -48,6 +48,7 @@ func (x x2m200Frame) Reset(t time.Duration) (bool, error) {
 		log.Printf("Ping Write Error %v, number of bytes %d\n", err, n)
 	}
 	go func() {
+		defer close(done)
 		for {
 
 			// for _ := range done {
@@ -58,9 +59,8 @@ func (x x2m200Frame) Reset(t time.Duration) (bool, error) {
 			}
 			// send response []byte back to caller
 			response <- b[:n]
-			d := <-done
-			if d {
-				close(done)
+			// d :=
+			if <-done {
 				return
 			}
 
@@ -70,6 +70,7 @@ func (x x2m200Frame) Reset(t time.Duration) (bool, error) {
 	for {
 		select {
 		case <-time.After(t):
+			log.Println("reset exiting")
 			return false, errResetTimeout
 		case resp := <-response:
 			ok, err := isValidResetResponse(resp)

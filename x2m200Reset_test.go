@@ -59,7 +59,7 @@ func TestReset(t *testing.T) {
 			}
 		}()
 
-		ok, err := client.Reset(time.Millisecond * 2)
+		ok, err := client.Reset(time.Millisecond * 3)
 
 		if ok != c.ok {
 			t.Errorf("expected %+v, got %+v", c.ok, ok)

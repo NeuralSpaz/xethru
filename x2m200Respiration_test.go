@@ -26,7 +26,7 @@ func TestResperationParser(t *testing.T) {
 
 func TestNewResperation(t *testing.T) {
 	client, _, _ := newLoopBackXethru()
-	App := New(client)
+	App := NewRespiration(client)
 
 	if App.AppID != [4]byte{0x14, 0x23, 0xa2, 0xd6} {
 		t.Errorf("AppID not set")
@@ -38,7 +38,7 @@ func TestRunResperation(t *testing.T) {
 	receive := Respiration{0, 1, 2, 3, 4, 5.5, 6, 7}
 	send := []byte{respirationStartByte, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x40, 0xb0, 0x00, 0x00, 0x40, 0xc0, 0x00, 0x00, 0x40, 0xe0, 0x00, 0x00}
 	client, sensorTX, _ := newLoopBackXethru()
-	App := New(client)
+	App := NewRespiration(client)
 
 	if App.AppID != [4]byte{0x14, 0x23, 0xa2, 0xd6} {
 		t.Errorf("AppID not set")
@@ -63,6 +63,11 @@ func TestRunResperation(t *testing.T) {
 			if data.Status != receive.Status {
 				t.Errorf("expected %v got %v", receive, data)
 			}
+			// json, err := json.MarshalIndent(&data, "", "\t")
+			// if err != nil {
+			// 	log.Println(err)
+			// }
+			// log.Println(string(json))
 			// log.Println(data)
 		}
 	}
