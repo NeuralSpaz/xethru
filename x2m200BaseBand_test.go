@@ -488,6 +488,11 @@ func TestParseBaseBandAPParseData(t *testing.T) {
 		t.Errorf("expected %v, got %v", rangeoffset, ap.RangeOffset)
 	}
 
+	// json, err := json.MarshalIndent(&ap, "", "\t")
+	// if err != nil {
+	// 	log.Println(err)
+	// }
+	// log.Println(string(json))
 	// log.Println(ap)
 }
 
@@ -527,7 +532,7 @@ func benchsetupAP(n int) []byte {
 		binary.LittleEndian.PutUint32(Sig, math.Float32bits(float32(sig)))
 		p = append(p, Sig...)
 	}
-	// log.Println(len(p))
+
 	return p
 }
 

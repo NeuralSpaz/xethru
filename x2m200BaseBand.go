@@ -35,28 +35,28 @@ import (
 
 // BaseBandIQ is the struct
 type BaseBandIQ struct {
-	Time         int64
-	Counter      uint32
-	Bins         uint32
-	BinLength    float64
-	SamplingFreq float64
-	CarrierFreq  float64
-	RangeOffset  float64
-	SigI         []float64
-	SigQ         []float64
+	Time         int64     `json:"time"`
+	Counter      uint32    `json:"counter"`
+	Bins         uint32    `json:"bins"`
+	BinLength    float64   `json:"binlength"`
+	SamplingFreq float64   `json:"samplingfreq"`
+	CarrierFreq  float64   `json:"carrierfreq"`
+	RangeOffset  float64   `json:"rangeoffset"`
+	SigI         []float64 `json:"sigi"`
+	SigQ         []float64 `json:"sigq"`
 }
 
 // BaseBandAmpPhase is the struct
 type BaseBandAmpPhase struct {
-	Time         int64
-	Counter      uint32
-	Bins         uint32
-	BinLength    float64
-	SamplingFreq float64
-	CarrierFreq  float64
-	RangeOffset  float64
-	Amplitude    []float64
-	Phase        []float64
+	Time         int64     `json:"time"`
+	Counter      uint32    `json:"counter"`
+	Bins         uint32    `json:"bins"`
+	BinLength    float64   `json:"binlength"`
+	SamplingFreq float64   `json:"samplingfreq"`
+	CarrierFreq  float64   `json:"carrierfreq"`
+	RangeOffset  float64   `json:"rangeoffset"`
+	Amplitude    []float64 `json:"amplitude"`
+	Phase        []float64 `json:"phase"`
 }
 
 const (
