@@ -33,30 +33,6 @@ type Sleep struct {
 	MovementFast  float64
 }
 
-// BaseBandIQ is the struct
-type BaseBandIQ struct {
-	Time         int64
-	Bins         uint32
-	BinLength    uint32
-	SamplingFreq float64
-	CarrierFreq  float64
-	RangeOffset  float64
-	SigI         []float64
-	SigQ         []float64
-}
-
-// BaseBandAmpPhase is the struct
-type BaseBandAmpPhase struct {
-	Time         int64
-	Bins         uint32
-	BinLength    uint32
-	SamplingFreq float64
-	CarrierFreq  float64
-	RangeOffset  float64
-	Amplitude    []float64
-	Phase        []float64
-}
-
 type respirationState uint32
 
 //go:generate jsonenums -type=respirationState
