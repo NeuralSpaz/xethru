@@ -49,8 +49,9 @@ type BaseBandIQ struct {
 // BaseBandAmpPhase is the struct
 type BaseBandAmpPhase struct {
 	Time         int64
+	Counter      uint32
 	Bins         uint32
-	BinLength    uint32
+	BinLength    float64
 	SamplingFreq float64
 	CarrierFreq  float64
 	RangeOffset  float64
@@ -61,7 +62,9 @@ type BaseBandAmpPhase struct {
 const (
 	x2m200AppData    = 0x50
 	x2m200BaseBandIQ = 0x0C
+	x2m200BaseBandAP = 0x0D
 	iqheadersize     = 29
+	apheadersize     = 29
 )
 
 // Example: <x2m200AppData> + [x2m200BaseBandIQ] + [Counter(i)] + [SamplingFrequency(f)]
@@ -78,7 +81,7 @@ func parseBaseBandIQ(b []byte) (BaseBandIQ, error) {
 	}
 	x2m200basebandiq := binary.LittleEndian.Uint32(b[1:5])
 	if x2m200basebandiq != x2m200BaseBandIQ {
-		log.Println(x2m200basebandiq, x2m200BaseBandIQ)
+		// log.Println(x2m200basebandiq, x2m200BaseBandIQ)
 		return BaseBandIQ{}, errParseBaseBandIQDataHeader
 	}
 
@@ -117,6 +120,56 @@ var (
 	errParseBaseBandIQIncompletePacket = errors.New("baseband data does contain a full packet of data")
 )
 
+// Example: <XTS_SPR_APPDATA> + [XTS_ID_BASEBAND_AMPLITUDE_PHASE(i)] + [Counter(i)] + [NumOfBins(i)]
+// + [BinLength(f)] + [SamplingFrequency(f)] + [CarrierFrequency(f)] + [RangeOffset(f)] + [Amplitude(f)]
+// + ... + [Phase(f)] + ... + <CRC> + <End>
+
 func parseBaseBandAP(b []byte) (BaseBandAmpPhase, error) {
-	return BaseBandAmpPhase{}, nil
+	if len(b) < 1 {
+		return BaseBandAmpPhase{}, errParseBaseBandAPNoData
+	}
+	if b[0] != x2m200AppData {
+		return BaseBandAmpPhase{}, errParseBaseBandAPNotBaseBand
+	}
+	if len(b) < apheadersize {
+		return BaseBandAmpPhase{}, errParseBaseBandAPNotEnoughBytes
+	}
+	x2m200basebandap := binary.LittleEndian.Uint32(b[1:5])
+	if x2m200basebandap != x2m200BaseBandAP {
+		log.Println(x2m200basebandap, x2m200BaseBandAP)
+		return BaseBandAmpPhase{}, errParseBaseBandAPDataHeader
+	}
+
+	var ap BaseBandAmpPhase
+	ap.Time = time.Now().UnixNano()
+	ap.Counter = binary.LittleEndian.Uint32(b[5:9])
+	ap.Bins = binary.LittleEndian.Uint32(b[9:13])
+	ap.BinLength = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[13:17])))
+	ap.SamplingFreq = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[17:21])))
+	ap.CarrierFreq = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[21:25])))
+	ap.RangeOffset = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[25:29])))
+
+	if len(b) < int(iqheadersize+uint32(ap.Bins)) {
+		return ap, errParseBaseBandAPIncompletePacket
+	}
+
+	for i := apheadersize; i < int((ap.Bins*4)+apheadersize); i += 4 {
+		amplitude := float64(math.Float32frombits(binary.LittleEndian.Uint32(b[i : i+4])))
+		ap.Amplitude = append(ap.Amplitude, amplitude)
+	}
+
+	for i := int(apheadersize + 4*ap.Bins); i < int((ap.Bins*8)+apheadersize); i += 4 {
+		phase := float64(math.Float32frombits(binary.LittleEndian.Uint32(b[i : i+4])))
+		ap.Phase = append(ap.Phase, phase)
+	}
+
+	return ap, nil
 }
+
+var (
+	errParseBaseBandAPNoData           = errors.New("baseband data is zero length")
+	errParseBaseBandAPNotBaseBand      = errors.New("baseband data does not start with x2m200AppData")
+	errParseBaseBandAPNotEnoughBytes   = errors.New("baseband data does contain enough bytes")
+	errParseBaseBandAPDataHeader       = errors.New("baseband data does contain ap baseband header")
+	errParseBaseBandAPIncompletePacket = errors.New("baseband data does contain a full packet of data")
+)
