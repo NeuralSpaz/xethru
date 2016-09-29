@@ -11,6 +11,6 @@ type Module struct {
 	DetectionZoneEnd   float32
 	Sensitivity        uint32
 	Timeout            time.Duration
-	data               chan interface{}
+	Data               chan interface{}
 	parser             func(b []byte) (interface{}, error)
 }

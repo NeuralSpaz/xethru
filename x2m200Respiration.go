@@ -54,7 +54,7 @@ func NewModule(f Framer, mode string) *Module {
 	parser := parseRespiration
 	switch mode {
 	case "respiration":
-		appID = [4]byte{0x14, 0x23, 0xa2, 0xd6}
+		appID = [4]byte{0xd6, 0xa2, 0x23, 0x14}
 		parser = parseRespiration
 	case "sleep":
 		appID = [4]byte{0x00, 0xf1, 0x7b, 0x17}
@@ -67,16 +67,18 @@ func NewModule(f Framer, mode string) *Module {
 		f:       f,
 		AppID:   appID,
 		Timeout: 500 * time.Millisecond,
-		data:    make(chan interface{}),
+		Data:    make(chan interface{}),
 		parser:  parser,
 	}
+	module.LEDMode = LEDSimple
+	module.SetLEDMode()
 	return module
 }
 
 // Reset is
 func (r *Module) Reset() (bool, error) {
 	log.Println("Called Reset")
-	return r.f.Reset(1 * time.Millisecond)
+	return r.f.Reset(2000 * time.Millisecond)
 }
 
 type ledMode byte
@@ -98,11 +100,12 @@ func (r *Module) SetLEDMode() {
 	// if r.LEDMode == nil {
 	// 	r.LEDMode == LEDOff
 	// }
+	log.Println("Setting LED MODE")
 	n, err := r.f.Write([]byte{x2m200SetLEDControl, byte(r.LEDMode), 0x00})
 	if err != nil {
 		log.Println(err, n)
 	}
-	b := make([]byte, 20)
+	b := make([]byte, 1024)
 	n, err = r.f.Read(b)
 	if err != nil {
 		log.Println(err, n)
@@ -115,12 +118,14 @@ func (r *Module) SetLEDMode() {
 const x2m200AppCommand = 0x10
 const x2m200Set = 0x10
 
-var x2m200DetectionZone = [4]byte{0x96, 0xa1, 0x0a, 0x1c}
+// var x2m200DetectionZone = [4]byte{0x96, 0xa1, 0x0a, 0x1c}
+var x2m200DetectionZone = [4]byte{0x1c, 0x0a, 0xa1, 0x96}
 
 // SetDetectionZone is
 // Example: <Start> + <XTS_SPC_APPCOMMAND> + <XTS_SPCA_SET> + [XTS_ID_DETECTION_ZONE(i)] + [Start(f)] + [End(f)] + <CRC> + <End>
 // Response: <Start> + <XTS_SPR_ACK> + <CRC> + <End>
 func (r *Module) SetDetectionZone(start, end float64) {
+	log.Printf("Setting Detection zone starting at %2.2fm ending at %2.2fm\n", start, end)
 
 	r.DetectionZoneStart = float32(start)
 	r.DetectionZoneEnd = float32(end)
@@ -135,17 +140,19 @@ func (r *Module) SetDetectionZone(start, end float64) {
 	if err != nil {
 		log.Println(err, n)
 	}
-	b := make([]byte, 20)
+	b := make([]byte, 1024)
 	n, err = r.f.Read(b)
 	if err != nil {
 		log.Println(err, n)
 	}
 	if b[0] != x2m200Ack {
+		log.Printf("%#02x\n", b[0:n])
 		log.Println("Not Ack")
 	}
 }
 
-var x2m200Sensitivity = [4]byte{0x10, 0xa5, 0x11, 0x2b}
+// var x2m200Sensitivity = [4]byte{0x10, 0xa5, 0x11, 0x2b}
+var x2m200Sensitivity = [4]byte{0x2b, 0x11, 0xa5, 0x10}
 
 // SetSensitivity is
 // Example: <Start> + <XTS_SPC_APPCOMMAND> + <XTS_SPCA_SET> + [XTS_ID_SENSITIVITY(i)] + [Sensitivity(i)]+ <CRC> + <End>
@@ -167,12 +174,13 @@ func (r *Module) SetSensitivity(sensitivity int) {
 	if err != nil {
 		log.Println(err, n)
 	}
-	b := make([]byte, 20)
+	b := make([]byte, 1024)
 	n, err = r.f.Read(b)
 	if err != nil {
 		log.Println(err, n)
 	}
 	if b[0] != x2m200Ack {
+		log.Printf("%#02x\n", b[0:n])
 		log.Println("Not Ack")
 	}
 }
@@ -190,53 +198,83 @@ func (r *Module) Load() {
 	if err != nil {
 		log.Println(err, n)
 	}
-	b := make([]byte, 20)
+	b := make([]byte, 1024)
 	n, err = r.f.Read(b)
 	if err != nil {
 		log.Println(err, n)
 	}
 	if b[0] != x2m200Ack {
+		log.Printf("%#02x\n", b[0:n])
 		log.Println("Not Ack")
 	}
 }
 
 // Run start app
 func (r *Module) Run() {
-	defer close(r.data)
+	defer r.f.Write([]byte{0x20, 0x11})
 
-	raw := make(chan []byte)
-	done := make(chan error)
-	defer close(raw)
-
-	go func() {
-		defer close(done)
-		for {
-			b := make([]byte, 32, 64)
-			n, err := r.f.Read(b)
-			if err != nil {
-				done <- err
-				return
-			}
-			raw <- b[:n]
-		}
-	}()
+	n, err := r.f.Write([]byte{0x20, 0x01})
+	if err != nil {
+		log.Println(err, n)
+	}
 
 	for {
-		select {
-		case b := <-raw:
-			d, err := r.parser(b)
-			if err != nil {
-				log.Println(err)
-			}
-			r.data <- d
-		case err := <-done:
+		b := make([]byte, 128, 256)
+		n, err := r.f.Read(b)
+		if err != nil {
 			log.Println(err)
-			return
-		case <-time.After(r.Timeout):
-			// TODO on timeout do somthing smarter
-			return
 		}
+		log.Println(b[:n], n)
+		data, err := parseRespiration(b[:n])
+		if err != nil {
+			log.Println(err)
+		}
+		d := data.(Respiration)
+
+		log.Printf("%#+v\n", d)
 	}
+	// defer close(r.Data)
+	//
+	// raw := make(chan []byte)
+	// done := make(chan error)
+	// defer close(raw)
+	//
+	// go func() {
+	// 	defer close(done)
+	// 	for {
+	// 		b := make([]byte, 128, 256)
+	// 		n, err := r.f.Read(b)
+	// 		if err != nil {
+	// 			done <- err
+	// 			return
+	// 		}
+	// 		if n > 0 {
+	// 			log.Printf("RAW: %#02x", b[:n])
+	// 			raw <- b[:n]
+	// 		}
+	//
+	// 	}
+	// }()
+	//
+	// for {
+	// 	select {
+	// 	case b := <-raw:
+	// 		log.Printf("B: %#02x", b)
+	// 		d, err := r.parser(b)
+	// 		if err != nil {
+	// 			log.Println(err)
+	// 		} else {
+	// 			r.Data <- d
+	// 		}
+	//
+	// 	case err := <-done:
+	// 		log.Println(err)
+	// 		return
+	// 	case <-time.After(r.Timeout):
+	// 		// TODO on timeout do somthing smarter
+	// 		return
+	// 	}
+	// }
 
 }
 
@@ -245,6 +283,7 @@ const (
 )
 
 func parseRespiration(b []byte) (interface{}, error) {
+	log.Println(b)
 	if b[0] != respirationStartByte {
 		return Respiration{}, errParseRespDataNoResoirationByte
 	}
@@ -253,13 +292,13 @@ func parseRespiration(b []byte) (interface{}, error) {
 	}
 	data := Respiration{}
 	data.Time = time.Now().UnixNano()
-	data.Status = binary.BigEndian.Uint32(b[1:5])
-	data.Counter = binary.BigEndian.Uint32(b[5:9])
-	data.State = respirationState(binary.BigEndian.Uint32(b[9:13]))
-	data.RPM = binary.BigEndian.Uint32(b[13:17])
-	data.Distance = float64(math.Float32frombits(binary.BigEndian.Uint32(b[17:21])))
-	data.SignalQuality = float64(math.Float32frombits(binary.BigEndian.Uint32(b[21:25])))
-	data.Movement = float64(math.Float32frombits(binary.BigEndian.Uint32(b[25:29])))
+	data.Status = binary.LittleEndian.Uint32(b[1:5])
+	data.Counter = binary.LittleEndian.Uint32(b[5:9])
+	data.State = respirationState(binary.LittleEndian.Uint32(b[9:13]))
+	data.RPM = binary.LittleEndian.Uint32(b[13:17])
+	data.Distance = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[17:21])))
+	data.Movement = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[21:25])))
+	data.SignalQuality = float64(binary.LittleEndian.Uint32(b[25:29]))
 	return data, nil
 }
 

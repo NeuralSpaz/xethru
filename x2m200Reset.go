@@ -45,7 +45,7 @@ func (x x2m200Frame) Reset(t time.Duration) (bool, error) {
 	n, err := x.Write([]byte{resetCmd})
 
 	if err != nil {
-		log.Printf("Ping Write Error %v, number of bytes %d\n", err, n)
+		log.Printf("Reset Write Error %v, number of bytes %d\n", err, n)
 	}
 	go func() {
 		defer close(done)
@@ -55,7 +55,7 @@ func (x x2m200Frame) Reset(t time.Duration) (bool, error) {
 			b := make([]byte, 20)
 			n, err = x.Read(b)
 			if err != nil {
-				log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+				log.Printf("Reset Read Error %v, number of bytes %d\n", err, n)
 			}
 			// send response []byte back to caller
 			response <- b[:n]
@@ -90,6 +90,7 @@ func (x x2m200Frame) Reset(t time.Duration) (bool, error) {
 var errResetTimeout = errors.New("reset timeout")
 
 func isValidResetResponse(b []byte) (bool, error) {
+	log.Printf("RESET DEBUG: %#02x", b)
 	if len(b) == 0 {
 		return false, errResetNotEnoughBytes
 	}

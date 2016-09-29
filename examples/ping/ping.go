@@ -22,6 +22,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"time"
 
@@ -31,9 +32,9 @@ import (
 
 func main() {
 	log.Println("X2M200 Ping Demo")
-	commPort := flag.String("commPort", "/dev/ttyUSB0", "the comm port you wish to use")
+	commPort := flag.String("commPort", "/dev/ttyACM0", "the comm port you wish to use")
 	baudrate := flag.Uint("baudrate", 115200, "the baud rate for the comm port you wish to use")
-	pingTimeout := flag.Duration("pingTimeout", time.Millisecond*300, "timeout for ping command")
+	pingTimeout := flag.Duration("pingTimeout", time.Millisecond*60, "timeout for ping command")
 	flag.Parse()
 
 	options := serial.OpenOptions{
@@ -50,6 +51,11 @@ func main() {
 	}
 	defer port.Close()
 	x2 := xethru.Open("x2m200", port)
+	// ok, err := x2.Reset(time.Millisecond * 10000)
+	// log.Println(ok)
+	// if err != nil {
+	// 	log.Println("Reset Error: ", err)
+	// }
 
 	for i := 0; i < 10; i++ {
 		ok, err := Ping(x2, *pingTimeout)
@@ -67,12 +73,11 @@ func main() {
 
 const (
 	x2m200PingCommand          = 0x01
-	x2m200PingSeed             = 0xeeaaeaae
-	x2m200PingResponseReady    = 0xaaeeaeea
-	x2m200PingResponseNotReady = 0xaeeaeeaa
+	x2m200PingSeed             = 0xaeeaaaee // aeeaaaee
+	x2m200PingResponseReady    = 0xeaaeeeaa // eaaeeeaa
+	x2m200PingResponseNotReady = 0xaaeeeaae // aaeeeaae
 )
 
-//
 // // Ping takes a time.Durration and waits for a maxium of that time before
 // // timing out, usefull for confirming configurations is working
 // // a true return with no error means the the xethru module is ready to
@@ -106,7 +111,9 @@ func ping(x xethru.Framer, response chan []byte) {
 		seed := make([]byte, 4)
 		binary.BigEndian.PutUint32(seed, x2m200PingSeed)
 		// fmt.Printf("seed %x\n", seed)
-		cmd := []byte{x2m200PingCommand, seed[0], seed[1], seed[2], seed[3]}
+		// eeaaeaae
+		// eeaaeaae
+		cmd := []byte{0x01, 0xae, 0xea, 0xaa, 0xee}
 		// Write to Framer
 		n, err := x.Write(cmd)
 		// x.w.Flush()
@@ -118,7 +125,7 @@ func ping(x xethru.Framer, response chan []byte) {
 		b := make([]byte, 20)
 		n, err = x.Read(b)
 		if err != nil {
-			log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
+			log.Printf("Ping Read Error %v, number of bytes %d\n, %02x", err, n, b[0:n])
 		}
 		// retry
 		for n == 0 {
@@ -138,6 +145,7 @@ func ping(x xethru.Framer, response chan []byte) {
 //
 func isValidPingResponse(b []byte) (bool, error) {
 	// check response length is
+	fmt.Printf("%#0x\n", b)
 	if len(b) != 5 {
 		return false, errPingNotEnoughBytes
 	}
@@ -147,6 +155,7 @@ func isValidPingResponse(b []byte) (bool, error) {
 	}
 	// check for valid response first striping off startByte
 	resp := binary.BigEndian.Uint32(b[1:])
+	fmt.Printf("%#0x\n", resp)
 	switch resp {
 	case x2m200PingResponseNotReady:
 		return false, nil

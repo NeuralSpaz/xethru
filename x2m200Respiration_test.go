@@ -58,7 +58,7 @@ func TestRunResperation(t *testing.T) {
 	// counter := 0
 	for {
 		select {
-		case data, ok := <-App.data:
+		case data, ok := <-App.Data:
 			if !ok {
 				return
 			}

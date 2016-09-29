@@ -93,9 +93,9 @@ func (x x2m200Frame) ping(response chan []byte) {
 //
 func isValidPingResponse(b []byte) (bool, error) {
 	// check response length is
-	if len(b) != 5 {
-		return false, errPingNotEnoughBytes
-	}
+	// if len(b) != 5 {
+	// 	return false, errPingNotEnoughBytes
+	// }
 	// Check response starts with Ping Byte
 	if b[0] != x2m200PingCommand {
 		return false, errPingDoesNotStartWithPingCMD
