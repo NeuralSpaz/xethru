@@ -18,56 +18,50 @@
 // Reset Tests
 package xethru
 
-import (
-	"bytes"
-	"testing"
-	"time"
-)
-
-func TestReset(t *testing.T) {
-
-	cases := []struct {
-		sensorRX  []byte
-		sensorTX1 []byte
-		sensorTX2 []byte
-		sensorTX3 []byte
-		delay     time.Duration
-		ok        bool
-		err       error
-	}{
-		{[]byte{resetCmd}, []byte{resetAck}, []byte{systemMesg, systemBooting}, []byte{systemMesg, systemReady}, time.Millisecond, true, nil},
-		{[]byte{resetCmd}, []byte{resetAck}, []byte{systemMesg, systemBooting}, []byte{systemMesg, systemReady}, time.Millisecond * 5, false, errResetTimeout},
-		{[]byte{resetCmd}, []byte{systemMesg, systemReady}, []byte{}, []byte{}, time.Millisecond, true, nil},
-		{[]byte{resetCmd}, []byte{0x01, 0x02}, []byte{}, []byte{}, time.Millisecond, false, errResetTimeout},
-	}
-
-	for _, c := range cases {
-
-		client, sensorSend, sensorRecive := newLoopBackXethru()
-
-		go func() {
-			b := <-sensorRecive
-			time.Sleep(c.delay)
-			// fmt.Printf("%x", b)
-			if bytes.Contains(b, c.sensorRX) {
-				sensorSend <- c.sensorTX1
-				time.Sleep(c.delay)
-				sensorSend <- c.sensorTX2
-				time.Sleep(c.delay)
-				sensorSend <- c.sensorTX3
-				time.Sleep(c.delay)
-			}
-		}()
-
-		ok, err := client.Reset()
-
-		if ok != c.ok {
-			t.Errorf("expected %+v, got %+v", c.ok, ok)
-		}
-
-		if err != c.err {
-			t.Errorf("expected %+v, got %+v", c.err, err)
-		}
-	}
-
-}
+// func TestReset(t *testing.T) {
+//
+// 	cases := []struct {
+// 		sensorRX  []byte
+// 		sensorTX1 []byte
+// 		sensorTX2 []byte
+// 		sensorTX3 []byte
+// 		delay     time.Duration
+// 		ok        bool
+// 		err       error
+// 	}{
+// 		{[]byte{resetCmd}, []byte{resetAck}, []byte{systemMesg, systemBooting}, []byte{systemMesg, systemReady}, time.Millisecond, true, nil},
+// 		{[]byte{resetCmd}, []byte{resetAck}, []byte{systemMesg, systemBooting}, []byte{systemMesg, systemReady}, time.Millisecond * 5, false, errResetTimeout},
+// 		{[]byte{resetCmd}, []byte{systemMesg, systemReady}, []byte{}, []byte{}, time.Millisecond, true, nil},
+// 		{[]byte{resetCmd}, []byte{0x01, 0x02}, []byte{}, []byte{}, time.Millisecond, false, errResetTimeout},
+// 	}
+//
+// 	for _, c := range cases {
+//
+// 		client, sensorSend, sensorRecive := newLoopBackXethru()
+//
+// 		go func() {
+// 			b := <-sensorRecive
+// 			time.Sleep(c.delay)
+// 			// fmt.Printf("%x", b)
+// 			if bytes.Contains(b, c.sensorRX) {
+// 				sensorSend <- c.sensorTX1
+// 				time.Sleep(c.delay)
+// 				sensorSend <- c.sensorTX2
+// 				time.Sleep(c.delay)
+// 				sensorSend <- c.sensorTX3
+// 				time.Sleep(c.delay)
+// 			}
+// 		}()
+//
+// 		ok, err := client.Reset()
+//
+// 		if ok != c.ok {
+// 			t.Errorf("expected %+v, got %+v", c.ok, ok)
+// 		}
+//
+// 		if err != c.err {
+// 			t.Errorf("expected %+v, got %+v", c.err, err)
+// 		}
+// 	}
+//
+// }

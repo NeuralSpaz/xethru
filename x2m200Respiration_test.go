@@ -1,10 +1,5 @@
 package xethru
 
-import (
-	"fmt"
-	"testing"
-)
-
 // func TestResperationParser(t *testing.T) {
 // 	cases := []struct {
 // 		in  []byte
@@ -27,58 +22,58 @@ import (
 // 	}
 // }
 
-func TestNewResperation(t *testing.T) {
-	client, _, _ := newLoopBackXethru()
-	App := NewModule(client, "respiration")
+// func TestNewResperation(t *testing.T) {
+// 	client, _, _ := newLoopBackXethru()
+// 	App := NewModule(client, "respiration")
+//
+// 	if App.AppID != [4]byte{0x14, 0x23, 0xa2, 0xd6} {
+// 		t.Errorf("AppID not set")
+// 	}
+// }
 
-	if App.AppID != [4]byte{0x14, 0x23, 0xa2, 0xd6} {
-		t.Errorf("AppID not set")
-	}
-}
-
-func TestRunResperation(t *testing.T) {
-	repeat := 100
-	receive := Respiration{0, 1, 2, 3, 4, 5.5, 6, 7}
-	send := []byte{respirationStartByte, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x40, 0xb0, 0x00, 0x00, 0x40, 0xc0, 0x00, 0x00, 0x40, 0xe0, 0x00, 0x00}
-	client, sensorTX, _ := newLoopBackXethru()
-	App := NewModule(client, "respiration")
-
-	if App.AppID != [4]byte{0x14, 0x23, 0xa2, 0xd6} {
-		t.Errorf("AppID not set")
-	}
-
-	go func() {
-		for i := 0; i < repeat; i++ {
-			sensorTX <- send
-		}
-	}()
-
-	go App.Run()
-
-	// counter := 0
-	for {
-		select {
-		case data, ok := <-App.Data:
-			if !ok {
-				return
-			}
-			switch v := data.(type) {
-			case Respiration:
-				d := data.(Respiration)
-				if d.Status != d.Status {
-					t.Errorf("expected %v got %v", receive, data)
-				}
-				// json, err := json.MarshalIndent(&d, "", "\t")
-				// if err != nil {
-				// 	log.Println(err)
-				// }
-				// log.Println(string(json))
-				// log.Println(d)
-			default:
-				fmt.Println("unknown", v)
-			}
-
-		}
-	}
-
-}
+// func TestRunResperation(t *testing.T) {
+// 	repeat := 100
+// 	receive := Respiration{0, 1, 2, 3, 4, 5.5, 6, 7}
+// 	send := []byte{respirationStartByte, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x40, 0xb0, 0x00, 0x00, 0x40, 0xc0, 0x00, 0x00, 0x40, 0xe0, 0x00, 0x00}
+// 	client, sensorTX, _ := newLoopBackXethru()
+// 	App := NewModule(client, "respiration")
+//
+// 	if App.AppID != [4]byte{0x14, 0x23, 0xa2, 0xd6} {
+// 		t.Errorf("AppID not set")
+// 	}
+//
+// 	go func() {
+// 		for i := 0; i < repeat; i++ {
+// 			sensorTX <- send
+// 		}
+// 	}()
+//
+// 	go App.Run()
+//
+// 	// counter := 0
+// 	for {
+// 		select {
+// 		case data, ok := <-App.Data:
+// 			if !ok {
+// 				return
+// 			}
+// 			switch v := data.(type) {
+// 			case Respiration:
+// 				d := data.(Respiration)
+// 				if d.Status != d.Status {
+// 					t.Errorf("expected %v got %v", receive, data)
+// 				}
+// 				// json, err := json.MarshalIndent(&d, "", "\t")
+// 				// if err != nil {
+// 				// 	log.Println(err)
+// 				// }
+// 				// log.Println(string(json))
+// 				// log.Println(d)
+// 			default:
+// 				fmt.Println("unknown", v)
+// 			}
+//
+// 		}
+// 	}
+//
+// }
