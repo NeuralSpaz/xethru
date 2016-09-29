@@ -70,25 +70,25 @@ func NewModule(f Framer, mode string) *Module {
 		Data:    make(chan interface{}),
 		parser:  parser,
 	}
-	module.LEDMode = LEDSimple
-	module.SetLEDMode()
+
 	return module
 }
 
 // Reset is
-func (r *Module) Reset() (bool, error) {
-	log.Println("Called Reset")
-	return r.f.Reset(2000 * time.Millisecond)
-}
+// func (r *Module) Reset() (bool, error) {
+// 	log.Println("Called Reset")
+// 	return r.f.Reset()
+// }
 
 type ledMode byte
 
 //go:generate jsonenums -type=ledMode
 //go:generate stringer -type=ledMode
 const (
-	LEDOff    ledMode = 0
-	LEDSimple ledMode = 1
-	LEDFull   ledMode = 2
+	LEDOff        ledMode = 0
+	LEDSimple     ledMode = 1
+	LEDFull       ledMode = 2
+	LEDInhalation ledMode = 3
 )
 
 const x2m200SetLEDControl = 0x24
@@ -118,8 +118,9 @@ func (r *Module) SetLEDMode() {
 const x2m200AppCommand = 0x10
 const x2m200Set = 0x10
 
-// var x2m200DetectionZone = [4]byte{0x96, 0xa1, 0x0a, 0x1c}
-var x2m200DetectionZone = [4]byte{0x1c, 0x0a, 0xa1, 0x96}
+var x2m200DetectionZone = [4]byte{0x96, 0xa1, 0x0a, 0x1c}
+
+// var x2m200DetectionZone = [4]byte{0x1c, 0x0a, 0xa1, 0x96}
 
 // SetDetectionZone is
 // Example: <Start> + <XTS_SPC_APPCOMMAND> + <XTS_SPCA_SET> + [XTS_ID_DETECTION_ZONE(i)] + [Start(f)] + [End(f)] + <CRC> + <End>
@@ -136,7 +137,10 @@ func (r *Module) SetDetectionZone(start, end float64) {
 	binary.LittleEndian.PutUint32(startbytes, math.Float32bits(r.DetectionZoneStart))
 	binary.LittleEndian.PutUint32(endbytes, math.Float32bits(r.DetectionZoneEnd))
 
-	n, err := r.f.Write([]byte{x2m200AppCommand, x2m200Set, x2m200DetectionZone[0], x2m200DetectionZone[1], x2m200DetectionZone[2], x2m200DetectionZone[3], startbytes[0], startbytes[1], startbytes[2], startbytes[3], endbytes[0], endbytes[1], endbytes[2], endbytes[3]})
+	// n, err := r.f.Write([]byte{x2m200AppCommand, x2m200Set, x2m200DetectionZone[0], x2m200DetectionZone[1], x2m200DetectionZone[2], x2m200DetectionZone[3], startbytes[0], startbytes[1], startbytes[2], startbytes[3], endbytes[0], endbytes[1], endbytes[2], endbytes[3]})
+
+	n, err := r.f.Write([]byte{0x10, 0x10, 0x1c, 0x0a, 0xa1, 0x96, startbytes[0], startbytes[1], startbytes[2], startbytes[3], endbytes[0], endbytes[1], endbytes[2], endbytes[3]})
+
 	if err != nil {
 		log.Println(err, n)
 	}
@@ -193,20 +197,24 @@ const (
 // Load is
 // Example: <Start> + <XTS_SPC_MOD_LOADAPP> + [AppID(i)] + <CRC> + <End>
 // Response: <Start> + <XTS_SPR_ACK> + <CRC> + <End>
-func (r *Module) Load() {
+func (r *Module) Load() error {
 	n, err := r.f.Write([]byte{x2m200LoadModule, r.AppID[0], r.AppID[1], r.AppID[2], r.AppID[3]})
 	if err != nil {
 		log.Println(err, n)
+		return err
 	}
 	b := make([]byte, 1024)
 	n, err = r.f.Read(b)
 	if err != nil {
 		log.Println(err, n)
+		return err
 	}
 	if b[0] != x2m200Ack {
 		log.Printf("%#02x\n", b[0:n])
 		log.Println("Not Ack")
+		return errors.New("load module error, was not ack'ed")
 	}
+	return nil
 }
 
 // Run start app
@@ -218,21 +226,55 @@ func (r *Module) Run() {
 		log.Println(err, n)
 	}
 
-	for {
-		b := make([]byte, 128, 256)
-		n, err := r.f.Read(b)
-		if err != nil {
-			log.Println(err)
-		}
-		log.Println(b[:n], n)
-		data, err := parseRespiration(b[:n])
-		if err != nil {
-			log.Println(err)
-		}
-		d := data.(Respiration)
+	output := make(chan []byte, 1000)
 
-		log.Printf("%#+v\n", d)
+	go func(out chan []byte) {
+		for {
+			b := make([]byte, 64)
+			n, err := r.f.Read(b)
+			if err != nil {
+				log.Println(err)
+			}
+			out <- b[:n]
+		}
+	}(output)
+
+	for {
+		select {
+		case out := <-output:
+			data, err := parseRespiration(out)
+			if err != nil {
+				log.Println(err)
+			}
+			d := data.(Respiration)
+			log.Printf("%#+v\n", d)
+		}
+
 	}
+	//
+	// for {
+	// 	b := make([]byte, 32, 64)
+	// 	n, err := r.f.Read(b)
+	// 	if err != nil {
+	// 		log.Println(err)
+	// 	}
+	// 	// log.Println(b[:n], n)
+	// 	data, err := parseRespiration(b[:n])
+	// 	for err != nil {
+	// 		log.Println(err)
+	// 		if err == errParseRespDataNoResoirationByte {
+	// 			b = b[:0+copy(b[0:], b[1:])]
+	// 			n--
+	// 			data, err = parseRespiration(b[:n])
+	// 		}
+	// 		if err == errParseRespDataNotEnoughBytes || err == errNoData {
+	// 			break
+	// 		}
+	// 	}
+	// 	d := data.(Respiration)
+	//
+	// 	log.Printf("%#+v\n", d)
+	// }
 	// defer close(r.Data)
 	//
 	// raw := make(chan []byte)
@@ -283,7 +325,10 @@ const (
 )
 
 func parseRespiration(b []byte) (interface{}, error) {
-	log.Println(b)
+	log.Printf("%02x\n", b)
+	if len(b) == 0 {
+		return Respiration{}, errNoData
+	}
 	if b[0] != respirationStartByte {
 		return Respiration{}, errParseRespDataNoResoirationByte
 	}
@@ -305,4 +350,5 @@ func parseRespiration(b []byte) (interface{}, error) {
 var (
 	errParseRespDataNoResoirationByte = errors.New("does not start with respiration byte")
 	errParseRespDataNotEnoughBytes    = errors.New("response does not contain enough bytes")
+	errNoData                         = errors.New("no data to parse")
 )

@@ -26,6 +26,7 @@ package xethru
 
 import (
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -71,6 +72,11 @@ func (x x2m200Frame) Write(p []byte) (n int, err error) {
 func (x x2m200Frame) Read(b []byte) (n int, err error) {
 	// read from the reader
 	n, err = x.r.Read(b)
+	// x.r.buffio.ReadByte
+	for i := 0; i < n; i++ {
+		fmt.Printf("%#02x", b[i])
+	}
+	fmt.Printf("\n")
 	// should be at least 3 bytes (start,crc,end)
 	if n > 3 {
 		var last byte
@@ -78,7 +84,7 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 		last, b = b[n-1], b[:n-1]
 		n--
 		if last != endByte {
-			return n, errPacketNotEndbyte
+			return 0, errPacketNotEndbyte
 		}
 
 		// pop crcByte to check later
@@ -96,10 +102,10 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 		// check crcbyte
 		crc, crcerr := checksum(&b)
 		if crcerr != nil {
-			return n, errPacketNoStartByte
+			return 0, errPacketNoStartByte
 		}
 		if crcByte != crc {
-			return n, errPacketBadCRC
+			return 0, errPacketBadCRC
 		}
 		// delete startByte
 		b = b[:0+copy(b[0:], b[1:])]
@@ -108,11 +114,11 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 		if b[0] == errorByte {
 			switch protocolError(b[1]) {
 			case notReconsied:
-				return n, errProtocolErrorNotReconsied
+				return 0, errProtocolErrorNotReconsied
 			case crcFailed:
-				return n, errProtocolErrorCRCfailed
+				return 0, errProtocolErrorCRCfailed
 			case invaidAppID:
-				return n, errProtocolErrorInvaidAppID
+				return 0, errProtocolErrorInvaidAppID
 			}
 		}
 		return n, nil

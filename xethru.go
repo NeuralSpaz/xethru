@@ -39,5 +39,5 @@ type Framer interface {
 	io.Writer
 	io.Reader
 	Ping(t time.Duration) (bool, error)
-	Reset(t time.Duration) (bool, error)
+	Reset() (bool, error)
 }

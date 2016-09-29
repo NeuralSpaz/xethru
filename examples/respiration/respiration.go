@@ -19,243 +19,119 @@
 package main
 
 import (
-	"encoding/binary"
-	"errors"
 	"flag"
-	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/NeuralSpaz/xethru"
-	"github.com/jacobsa/go-serial/serial"
+	// "github.com/jacobsa/go-serial/serial"
+	"github.com/tarm/serial"
 )
 
 func main() {
 	log.Println("X2M200 Respiration Demo")
+
 	commPort := flag.String("commPort", "/dev/ttyACM0", "the comm port you wish to use")
-	baudrate := flag.Uint("baudrate", 115200, "the baud rate for the comm port you wish to use")
+	baudrate := flag.Int("baudrate", 115200, "the baud rate for the comm port you wish to use")
 	// pingTimeout := flag.Duration("pingTimeout", time.Millisecond*500, "timeout for ping command")
 	flag.Parse()
+	log.Println("Waiting for Device to be ready")
 
-	options := serial.OpenOptions{
-		PortName:        *commPort,
-		BaudRate:        *baudrate,
-		DataBits:        8,
-		StopBits:        1,
-		MinimumReadSize: 4,
-	}
-
-	port, err := serial.Open(options)
+	online, err := exists(*commPort)
 	if err != nil {
-		log.Fatalf("serial.Open: %v", err)
-		// options = serial.OpenOptions{
-		// 	PortName:        "/dev/ttyACM1",
-		// 	BaudRate:        *baudrate,
-		// 	DataBits:        8,
-		// 	StopBits:        1,
-		// 	MinimumReadSize: 4,
-		// }
-		//
-		// port, err = serial.Open(options)
+		log.Fatal(err)
 	}
-	defer port.Close()
-	x2 := xethru.Open("x2m200", port)
-	time.Sleep(time.Millisecond * 200)
-	// x2.Reset(time.Millisecond * 2000)
-	// _, err = Ping(x2, *pingTimeout)
-	// if err != nil {
-	// 	// x2.Reset(time.Millisecond * 2000)
-	// 	// //resetCmd
-	// 	// log.Println("restring")
-	// 	// x2.Write([]byte{0x22})
-	// 	// b := make([]byte, 20)
-	// 	// x2.Read(b)
-	// 	// if b[0] != 0x10 {
-	// 	// 	log.Println("something went wrong")
-	// 	// }
-	// 	// time.Sleep(time.Second * 5)
-	// 	log.Fatalf("Error Communicating with Device: %v", err)
-	// }
+	for !online {
+		time.Sleep(time.Millisecond * 2000)
+		online, err = exists(*commPort)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	time.Sleep(time.Millisecond * 5000)
 
-	// n, err := x.Write([]byte{resetCmd})
+	c := &serial.Config{Name: *commPort, Baud: *baudrate}
+	port, err := serial.OpenPort(c)
 
-	// x2.Reset(time.Millisecond * 5000)
-	// port.Close()
-	//
-	// options = serial.OpenOptions{
-	// 	PortName:        "/dev/ttyACM1",
+	// options := serial.OpenOptions{
+	// 	PortName:        *commPort,
 	// 	BaudRate:        *baudrate,
 	// 	DataBits:        8,
 	// 	StopBits:        1,
 	// 	MinimumReadSize: 4,
 	// }
-	// //
+
+	// port, err := serial.Open(options)
+	if err != nil {
+		log.Fatalf("serial.Open: %v", err)
+	}
+
+	x2 := xethru.Open("x2m200", port)
+
+	reset, err := x2.Reset()
+	if err != nil {
+		log.Fatalf("serial.Open: %v", err)
+	}
+	log.Println(reset)
+	port.Close()
+	time.Sleep(time.Millisecond * 5000)
+
+	online, err = exists(*commPort)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for !online {
+		time.Sleep(time.Millisecond * 2000)
+		online, err = exists(*commPort)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	time.Sleep(time.Millisecond * 10000)
+
 	// port, err = serial.Open(options)
-	// if err != nil {
-	// 	log.Fatalf("serial.Open: %v", err)
-	// }
-	// x2 = xethru.Open("x2m200", port)
+	port, err = serial.OpenPort(c)
+	if err != nil {
+		log.Fatalf("serial.Open: %v", err)
+	}
 
-	// log.Println(ok)
-	// if err != nil {
-	// 	log.Println("Reset Error: ", err)
-	// }
-
-	// ok, err := Ping(x2, *pingTimeout)
-	// if err != nil {
-	// 	log.Fatalf("Error Communicating with Device: %v", err)
-	// }
-	//
-	// if !ok {
-	// 	log.Fatal("Device Not Ready")
-	// }
-	// if ok {
-	// 	log.Println("Xethru Module Read. Starting respiration sensing")
-	// }
+	// defer port.Close()
+	x2 = xethru.Open("x2m200", port)
 
 	m := xethru.NewModule(x2, "respiration")
 
-	// ok, err = m.Reset()
-	// if err != nil {
-	// 	log.Println(err)
-	// }
-	//
-	// if ok {
-	// 	log.Println("Continue")
-	// }
-
 	log.Printf("%#+v\n", m)
-	m.Load()
-	m.SetDetectionZone(0.5, 1.0)
+	err = m.Load()
+	if err != nil {
+		log.Println(err)
+	}
+
+	log.Println("Setting LED MODE")
+	m.LEDMode = xethru.LEDInhalation
+	m.SetLEDMode()
+	time.Sleep(time.Second * 1)
+
+	log.Println("SetDetectionZone")
+	m.SetDetectionZone(1.8, 2.5)
+	time.Sleep(time.Second * 1)
+
+	log.Println("SetSensitivity")
 	m.SetSensitivity(9)
+	time.Sleep(time.Second * 5)
+
 	m.Run()
 
-	// for {
-	// 	select {
-	// 	case data := <-m.Data:
-	// 		// if !ok {
-	// 		// 	return
-	// 		// }
-	// 		switch v := data.(type) {
-	// 		case xethru.Respiration:
-	// 			d := data.(xethru.Respiration)
-	// 			log.Println(d)
-	// 			// if d.Status != d.Status {
-	// 			// 	t.Errorf("expected %v got %v", receive, data)
-	// 			// }
-	// 			// json, err := json.MarshalIndent(&d, "", "\t")
-	// 			// if err != nil {
-	// 			// 	log.Println(err)
-	// 			// }
-	// 			// log.Println(string(json))
-	// 			// log.Println(d)
-	// 		default:
-	// 			fmt.Println("unknown", v)
-	// 		}
-	//
-	// 	}
-	// }
-
 }
 
-const (
-	x2m200PingCommand          = 0x01
-	x2m200PingSeed             = 0xaeeaaaee // aeeaaaee
-	x2m200PingResponseReady    = 0xeaaeeeaa // eaaeeeaa
-	x2m200PingResponseNotReady = 0xaaeeeaae // aaeeeaae
-)
-
-// // Ping takes a time.Durration and waits for a maxium of that time before
-// // timing out, usefull for confirming configurations is working
-// // a true return with no error means the the xethru module is ready to
-// // to accept other commands.
-func Ping(x xethru.Framer, t time.Duration) (bool, error) {
-	resp := make(chan []byte)
-	ping(x, resp)
-	if t == 0 {
-		t = time.Millisecond * 100
-	}
-	select {
-	case <-time.After(t):
-
-	case r := <-resp:
-		ok, err := isValidPingResponse(r)
-		return ok, err
-	}
-
-	return false, errPingTimeout
-
-}
-
-//
-var errPingTimeout = errors.New("ping timeout")
-
-//
-func ping(x xethru.Framer, response chan []byte) {
-	go func() {
-		// build ping command
-		// find betterway to do this
-		seed := make([]byte, 4)
-		binary.BigEndian.PutUint32(seed, x2m200PingSeed)
-		// fmt.Printf("seed %x\n", seed)
-		// eeaaeaae
-		// eeaaeaae
-		cmd := []byte{0x01, 0xae, 0xea, 0xaa, 0xee}
-		// Write to Framer
-		n, err := x.Write(cmd)
-		// x.w.Flush()
-		if err != nil {
-			log.Printf("Ping Write Error %v, number of bytes %d\n", err, n)
-		}
-
-		// Read from Framer
-		b := make([]byte, 1024)
-		n, err = x.Read(b)
-		if err != nil {
-			log.Printf("Ping Read Error %v, number of bytes %d\n, %02x", err, n, b[0:n])
-		}
-		// retry
-		for n == 0 {
-			n, err = x.Read(b)
-			if err != nil {
-				log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
-				log.Printf("bytes %x\n", b)
-			}
-		}
-		// send response []byte back to caller
-		response <- b[:n]
-
-	}()
-
-}
-
-//
-func isValidPingResponse(b []byte) (bool, error) {
-	// check response length is
-	// fmt.Printf("%#0x\n", b)
-	if len(b) != 5 {
-		fmt.Printf("%#0x\n", b)
-		return false, errPingNotEnoughBytes
-	}
-	// Check response starts with Ping Byte
-	if b[0] != x2m200PingCommand {
-		return false, errPingDoesNotStartWithPingCMD
-	}
-	// check for valid response first striping off startByte
-	resp := binary.BigEndian.Uint32(b[1:])
-	// fmt.Printf("%#0x\n", resp)
-	switch resp {
-	case x2m200PingResponseNotReady:
-		return false, nil
-	case x2m200PingResponseReady:
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
 		return true, nil
-	default:
-		return false, errPingDoesNotContainResponse
 	}
-
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return true, err
 }
-
-//
-var errPingDoesNotContainResponse = errors.New("ping response does not contain a valid ping response")
-var errPingNotEnoughBytes = errors.New("ping response does not contain correct number of bytes")
-var errPingDoesNotStartWithPingCMD = errors.New("ping response does not start with ping response start byte")

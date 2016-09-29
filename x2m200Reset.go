@@ -35,56 +35,36 @@ const (
 )
 
 // Reset should be the first to be called when connecting to the X2M200 sensor
-func (x x2m200Frame) Reset(t time.Duration) (bool, error) {
-	//TODO pullout comms timeouts to flags with sensible defaults
-	if t == 0 {
-		t = time.Millisecond * 100
-	}
-	response := make(chan []byte)
-	done := make(chan bool)
+func (x x2m200Frame) Reset() (bool, error) {
+
 	n, err := x.Write([]byte{resetCmd})
 
 	if err != nil {
 		log.Printf("Reset Write Error %v, number of bytes %d\n", err, n)
 	}
-	go func() {
-		defer close(done)
-		for {
 
-			// for _ := range done {
-			b := make([]byte, 20)
-			n, err = x.Read(b)
-			if err != nil {
-				log.Printf("Reset Read Error %v, number of bytes %d\n", err, n)
-			}
-			// send response []byte back to caller
-			response <- b[:n]
-			// d :=
-			if <-done {
-				return
-			}
-
+	b := make([]byte, 1024)
+	n, err = x.Read(b)
+	if err != nil {
+		log.Printf("Reset Read Error %v, number of bytes %d\n", err, n)
+	}
+	ok, err := isValidResetResponse(b[:n])
+	if err != nil {
+		log.Printf("Reset Read Error %v, number of bytes %d\n", err, n)
+	}
+	for !ok {
+		time.Sleep(time.Millisecond * 5)
+		b := make([]byte, 1024)
+		n, err = x.Read(b)
+		if err != nil {
+			log.Printf("Reset Read Error %v, number of bytes %d\n", err, n)
 		}
-	}()
-
-	for {
-		select {
-		case <-time.After(t):
-			log.Println("reset exiting")
-			return false, errResetTimeout
-		case resp := <-response:
-			ok, err := isValidResetResponse(resp)
-			if err != nil {
-				log.Printf("Error: %v, response: %x\n", err, resp)
-			}
-			if ok && err == nil {
-				done <- true
-				close(response)
-				return true, nil
-			}
-			done <- false
+		ok, err = isValidResetResponse(b[:n])
+		if err != nil {
+			log.Printf("Reset Read Error %v, number of bytes %d\n", err, n)
 		}
 	}
+	return true, nil
 }
 
 var errResetTimeout = errors.New("reset timeout")
@@ -104,7 +84,7 @@ func isValidResetResponse(b []byte) (bool, error) {
 	}
 	if b[0] == resetAck {
 		log.Println("Reset command confirmed")
-		return false, nil
+		return true, nil
 	}
 	return false, errResetResponseError
 }
