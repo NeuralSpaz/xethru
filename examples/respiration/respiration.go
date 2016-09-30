@@ -33,7 +33,7 @@ func main() {
 	log.Println("X2M200 Respiration Demo")
 
 	commPort := flag.String("commPort", "/dev/ttyACM0", "the comm port you wish to use")
-	baudrate := flag.Int("baudrate", 115200, "the baud rate for the comm port you wish to use")
+	baudrate := flag.Int("baudrate", 921600, "the baud rate for the comm port you wish to use")
 	// pingTimeout := flag.Duration("pingTimeout", time.Millisecond*500, "timeout for ping command")
 	flag.Parse()
 	log.Println("Waiting for Device to be ready")
@@ -61,11 +61,12 @@ func main() {
 	// 	StopBits:        1,
 	// 	MinimumReadSize: 4,
 	// }
-
+	//
 	// port, err := serial.Open(options)
 	if err != nil {
 		log.Fatalf("serial.Open: %v", err)
 	}
+	port.Flush()
 
 	x2 := xethru.Open("x2m200", port)
 
@@ -96,6 +97,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("serial.Open: %v", err)
 	}
+	// port.Flush()
 
 	// defer port.Close()
 	x2 = xethru.Open("x2m200", port)
@@ -105,7 +107,7 @@ func main() {
 	log.Printf("%#+v\n", m)
 	err = m.Load()
 	if err != nil {
-		log.Println(err)
+		log.Panicln(err)
 	}
 
 	log.Println("Setting LED MODE")
@@ -114,13 +116,14 @@ func main() {
 	time.Sleep(time.Second * 1)
 
 	log.Println("SetDetectionZone")
-	m.SetDetectionZone(1.8, 2.5)
+	m.SetDetectionZone(0.5, 1.2)
 	time.Sleep(time.Second * 1)
 
 	log.Println("SetSensitivity")
 	m.SetSensitivity(9)
-	time.Sleep(time.Second * 5)
-
+	time.Sleep(time.Second * 1)
+	// m.Enable("phase")
+	// time.Sleep(time.Second * 5)
 	m.Run()
 
 }

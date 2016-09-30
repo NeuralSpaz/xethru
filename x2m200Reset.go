@@ -43,7 +43,7 @@ func (x x2m200Frame) Reset() (bool, error) {
 		log.Printf("Reset Write Error %v, number of bytes %d\n", err, n)
 	}
 
-	b := make([]byte, 1024)
+	b := make([]byte, 4096)
 	n, err = x.Read(b)
 	if err != nil {
 		log.Printf("Reset Read Error %v, number of bytes %d\n", err, n)

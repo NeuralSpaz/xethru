@@ -26,7 +26,6 @@ package xethru
 
 import (
 	"errors"
-	"fmt"
 	"io"
 )
 
@@ -53,6 +52,7 @@ const (
 )
 
 func (x x2m200Frame) Write(p []byte) (n int, err error) {
+
 	p = append(p[:0], append([]byte{startByte}, p[0:]...)...)
 	// cant be error from checksum at we just set the startByte
 	crc, _ := checksum(&p)
@@ -64,8 +64,13 @@ func (x x2m200Frame) Write(p []byte) (n int, err error) {
 	}
 	p = append(p, crc)
 	p = append(p, endByte)
-
 	n, err = x.w.Write(p)
+
+	// fmt.Printf("DEBUG Write: ")
+	// for i := 0; i < n; i++ {
+	// 	fmt.Printf("%#02x", p[i])
+	// }
+	// fmt.Printf("\n")
 	return
 }
 
@@ -73,10 +78,11 @@ func (x x2m200Frame) Read(b []byte) (n int, err error) {
 	// read from the reader
 	n, err = x.r.Read(b)
 	// x.r.buffio.ReadByte
-	for i := 0; i < n; i++ {
-		fmt.Printf("%#02x", b[i])
-	}
-	fmt.Printf("\n")
+	// fmt.Printf("DEBUG Read: ")
+	// for i := 0; i < n; i++ {
+	// 	fmt.Printf("%#02x", b[i])
+	// }
+	// fmt.Printf("\n")
 	// should be at least 3 bytes (start,crc,end)
 	if n > 3 {
 		var last byte
