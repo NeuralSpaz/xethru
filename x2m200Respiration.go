@@ -11,7 +11,7 @@ import (
 // Respiration is the struct
 type Respiration struct {
 	Time          int64
-	Status        uint32
+	Status        status
 	Counter       uint32
 	State         respirationState
 	RPM           uint32
@@ -19,6 +19,14 @@ type Respiration struct {
 	SignalQuality float64
 	Movement      float64
 }
+
+type status uint32
+
+//go:generate jsonenums -type=status
+//go:generate stringer -type=status
+const (
+	respApp status = 594935334
+)
 
 // Sleep is the struct
 type Sleep struct {
@@ -48,7 +56,7 @@ type BaseBandAmpPhase struct {
 }
 
 //go:generate jsonenums -type=respirationState
-//go:generate stringer -type=respirationState
+//go:generate stringer -type=respirationState174
 const (
 	breathing      respirationState = 0
 	movement       respirationState = 1
@@ -70,7 +78,7 @@ func NewModule(f Framer, mode string) *Module {
 		parser = parse
 	case "sleep":
 		log.Println("Loading Sleep Module")
-		appID = [4]byte{0x00, 0xf1, 0xff, 0xff}
+		appID = [4]byte{0x17, 0x7b, 0xf1, 0x00}
 		parser = parse
 	case "basebandiq":
 		appID = [4]byte{0x14, 0x23, 0xa2, 0xd6}
@@ -217,7 +225,7 @@ func (r Module) Load() error {
 		log.Println(err, n)
 		return err
 	}
-	b := make([]byte, 1024)
+	b := make([]byte, 2048)
 	n, err = r.f.Read(b)
 	if err != nil {
 		log.Println(err, n)
@@ -309,7 +317,7 @@ func (r Module) Enable(mode string) error {
 }
 
 // Run start app
-func (r Module) Run() {
+func (r Module) Run(stream chan interface{}) {
 	defer r.f.Write([]byte{0x20, 0x11})
 
 	n, err := r.f.Write([]byte{0x20, 0x01})
@@ -321,7 +329,7 @@ func (r Module) Run() {
 
 	go func(out chan []byte) {
 		for {
-			b := make([]byte, 256)
+			b := make([]byte, 2048)
 			n, err := r.f.Read(b)
 			if err != nil {
 				log.Println(err)
@@ -333,7 +341,17 @@ func (r Module) Run() {
 	for {
 		select {
 		case out := <-output:
-			r.parser(out)
+			data, err := r.parser(out)
+			if err != nil {
+				log.Println(err)
+			}
+			stream <- data
+			// switch v := data.(type) {
+			// case Respiration:
+			// 	respiration <- data.(Respiration)
+			// }
+			// d := data.(Respiration)
+
 			// data, err := r.parser(out)
 			// if err != nil {
 			// 	log.Println(err)
@@ -425,7 +443,7 @@ const (
 )
 
 func parse(b []byte) (interface{}, error) {
-	log.Printf("%02x\n", b)
+	// log.Printf("%02x\n", b)
 	if len(b) == 0 {
 		return Respiration{}, errNoData
 	}
@@ -446,7 +464,7 @@ func parse(b []byte) (interface{}, error) {
 }
 
 func parseRespiration(b []byte) (Respiration, error) {
-	log.Printf("%02x\n", b)
+	// log.Printf("%02x\n", b)
 	if len(b) == 0 {
 		return Respiration{}, errNoData
 	}
@@ -461,7 +479,7 @@ func parseRespiration(b []byte) (Respiration, error) {
 	}
 	data := Respiration{}
 	data.Time = time.Now().UnixNano()
-	data.Status = binary.LittleEndian.Uint32(b[1:5])
+	data.Status = status(binary.LittleEndian.Uint32(b[1:5]))
 	data.Counter = binary.LittleEndian.Uint32(b[5:9])
 	data.State = respirationState(binary.LittleEndian.Uint32(b[9:13]))
 	data.RPM = binary.LittleEndian.Uint32(b[13:17])
@@ -469,7 +487,7 @@ func parseRespiration(b []byte) (Respiration, error) {
 	data.Movement = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[21:25])))
 	data.SignalQuality = float64(binary.LittleEndian.Uint32(b[25:29]))
 
-	log.Println(data)
+	// log.Println(data)
 	return data, nil
 }
 
@@ -481,7 +499,7 @@ var (
 
 func parseSleep(b []byte) (interface{}, error) {
 
-	log.Printf("%02x %d\n", b, len(b))
+	// log.Printf("%02x %d\n", b, len(b))
 	if len(b) == 0 {
 		return Sleep{}, errParseSleepDataNoData
 	}
@@ -557,6 +575,13 @@ func parseBaseBandAP(b []byte) (BaseBandAmpPhase, error) {
 		phase := float64(math.Float32frombits(binary.LittleEndian.Uint32(b[i : i+4])))
 		ap.Phase = append(ap.Phase, phase)
 	}
+	// log.Println(ap)
+
+	// b, err := json.MarshalIndent(ap, "\t", "")
+	// if err != nil {
+	// 	fmt.Println("error:", err)
+	// }
+	// os.Stdout.Write(b)
 
 	return ap, nil
 }

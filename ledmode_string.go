@@ -4,9 +4,9 @@ package xethru
 
 import "fmt"
 
-const _ledMode_name = "LEDOffLEDSimpleLEDFull"
+const _ledMode_name = "LEDOffLEDSimpleLEDFullLEDInhalation"
 
-var _ledMode_index = [...]uint8{0, 6, 15, 22}
+var _ledMode_index = [...]uint8{0, 6, 15, 22, 35}
 
 func (i ledMode) String() string {
 	if i >= ledMode(len(_ledMode_index)-1) {

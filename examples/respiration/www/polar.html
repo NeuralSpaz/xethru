@@ -1,0 +1,289 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		    <script src="/js/reconnecting-websocket.min.js"></script>
+		<style>
+			body {
+				margin: 10px;
+				padding: 10px;
+			}
+
+		</style>
+	</head>
+	<body onresize="resize_canvas()">
+		<canvas id="myCanvas"</canvas>
+		<script>
+
+			function resize_canvas(){
+			}
+
+			function Constellation(config) {
+				this.canvas = document.getElementById(config.canvasId);
+
+				this.minX = config.minX;
+				this.minY = config.minY;
+				this.maxX = config.maxX;
+				this.maxY = config.maxY;
+				this.unitsPerTick = config.unitsPerTick;
+
+				this.axisColor = '#aaa';
+				this.font = '8pt Calibri';
+				this.tickSize = 20;
+
+				if (window.innerWidth > window.innerHeight) {
+					this.canvas.width = window.innerHeight;
+					this.canvas.height = window.innerHeight;
+					this.canvas.width = document.body.clientHeight;
+					this.canvas.height = document.body.clientHeight;
+				} else {
+					this.canvas.width = window.innerWidth;
+					this.canvas.height = window.innerWidth;
+					this.canvas.width = document.body.clientWidth;
+					this.canvas.height = document.body.clientWidth;
+				}
+
+				this.context = this.canvas.getContext('2d');
+				this.rangeX = this.maxX - this.minX;
+				this.rangeY = this.maxY - this.minY;
+				this.unitX = this.canvas.width / this.rangeX;
+				this.unitY = this.canvas.height / this.rangeY;
+				this.centerY = Math.round(Math.abs(this.minY / this.rangeY) * this.canvas.height);
+				this.centerX = Math.round(Math.abs(this.minX / this.rangeX) * this.canvas.width);
+				this.iteration = (this.maxX - this.minX) / 1000;
+				this.scaleX = this.canvas.width / this.rangeX;
+				this.scaleY = this.canvas.height / this.rangeY;
+				if (this.scaleX >=  this.scaleY) {
+					this.minScale = this.scaleY
+				} else {
+					this.minScale = this.scaleX
+				}
+
+				this.drawXAxis();
+				this.drawYAxis();
+				this.drawCircularAxis();
+			}
+
+			Constellation.prototype.drawXAxis = function() {
+				var context = this.context;
+				context.save();
+				context.beginPath();
+				context.moveTo(0, this.centerY);
+				context.lineTo(this.canvas.width, this.centerY);
+				context.strokeStyle = this.axisColor;
+				context.lineWidth = 2;
+				context.stroke();
+
+				// draw tick marks
+				var xPosIncrement = this.unitsPerTick * this.unitX;
+				var xPos, unit;
+				context.font = this.font;
+				context.textAlign = 'center';
+				context.textBaseline = 'top';
+
+				// draw left tick marks
+				xPos = this.centerX - xPosIncrement;
+				unit = -1 * this.unitsPerTick;
+				while(xPos > 0) {
+					context.moveTo(xPos, this.centerY - this.tickSize / 2);
+					context.lineTo(xPos, this.centerY + this.tickSize / 2);
+					context.stroke();
+					context.fillText(unit, xPos, this.centerY + this.tickSize / 2 + 3);
+					unit -= this.unitsPerTick;
+					xPos = Math.round(xPos - xPosIncrement);
+				}
+
+				// draw right tick marks
+				xPos = this.centerX + xPosIncrement;
+				unit = this.unitsPerTick;
+				while(xPos < this.canvas.width) {
+					context.moveTo(xPos, this.centerY - this.tickSize / 2);
+					context.lineTo(xPos, this.centerY + this.tickSize / 2);
+					context.stroke();
+					context.fillText(unit, xPos, this.centerY + this.tickSize / 2 + 3);
+					unit += this.unitsPerTick;
+					xPos = Math.round(xPos + xPosIncrement);
+				}
+				context.restore();
+			};
+
+			Constellation.prototype.drawYAxis = function() {
+				var context = this.context;
+				context.save();
+				context.beginPath();
+				context.moveTo(this.centerX, 0);
+				context.lineTo(this.centerX, this.canvas.height);
+				context.strokeStyle = this.axisColor;
+				context.lineWidth = 2;
+				context.stroke();
+
+				// draw tick marks
+				var yPosIncrement = this.unitsPerTick * this.unitY;
+				var yPos, unit;
+				context.font = this.font;
+				context.textAlign = 'right';
+				context.textBaseline = 'middle';
+
+				// draw top tick marks
+				yPos = this.centerY - yPosIncrement;
+				unit = this.unitsPerTick;
+				while(yPos > 0) {
+					context.moveTo(this.centerX - this.tickSize / 2, yPos);
+					context.lineTo(this.centerX + this.tickSize / 2, yPos);
+					context.stroke();
+					context.fillText(unit, this.centerX - this.tickSize / 2 - 3, yPos);
+					unit += this.unitsPerTick;
+					yPos = Math.round(yPos - yPosIncrement);
+				}
+
+				// draw bottom tick marks
+				yPos = this.centerY + yPosIncrement;
+				unit = -1 * this.unitsPerTick;
+				while(yPos < this.canvas.height) {
+					context.moveTo(this.centerX - this.tickSize / 2, yPos);
+					context.lineTo(this.centerX + this.tickSize / 2, yPos);
+					context.stroke();
+					context.fillText(unit, this.centerX - this.tickSize / 2 - 3, yPos);
+					unit -= this.unitsPerTick;
+					yPos = Math.round(yPos + yPosIncrement);
+				}
+				context.restore();
+			};
+
+		Constellation.prototype.drawCircularAxis = function() {
+			var context = this.context;
+			context.beginPath();
+			context.moveTo(this.centerX+ this.scaleX*90/90*100, this.centerY);
+			context.arc(this.centerX,this.centerY,this.scaleX*90/90*100,0,2*Math.PI);
+			context.moveTo(this.centerX+ this.scaleX*80/90*100, this.centerY);
+			context.arc(this.centerX,this.centerY,this.scaleX*80/90*100,0,2*Math.PI);
+			context.moveTo(this.centerX+ this.scaleX*70/90*100, this.centerY);
+			context.arc(this.centerX,this.centerY,this.scaleX*70/90*100,0,2*Math.PI);
+			context.moveTo(this.centerX+ this.scaleX*60/90*100, this.centerY);
+			context.arc(this.centerX,this.centerY,this.scaleX*60/90*100,0,2*Math.PI);
+			context.moveTo(this.centerX+ this.scaleX*60/90*100, this.centerY);
+			context.arc(this.centerX,this.centerY,this.scaleX*60/90*100,0,2*Math.PI);
+			context.moveTo(this.centerX+ this.scaleX*50/90*100, this.centerY);
+			context.arc(this.centerX,this.centerY,this.scaleX*50/90*100,0,2*Math.PI);
+			context.moveTo(this.centerX+ this.scaleX*40/90*100, this.centerY);
+			context.arc(this.centerX,this.centerY,this.scaleX*40/90*100,0,2*Math.PI);
+			context.moveTo(this.centerX+ this.scaleX*40/90*100, this.centerY);
+			context.arc(this.centerX,this.centerY,this.scaleX*40/90*100,0,2*Math.PI);
+			context.moveTo(this.centerX+ this.scaleX*30/90*100, this.centerY);
+			context.arc(this.centerX,this.centerY,this.scaleX*30/90*100,0,2*Math.PI);
+			context.moveTo(this.centerX+ this.scaleX*20/90*100, this.centerY);
+			context.arc(this.centerX,this.centerY,this.scaleX*20/90*100,0,2*Math.PI);
+			context.moveTo(this.centerX+ this.scaleX*10/90*100, this.centerY);
+			context.arc(this.centerX,this.centerY,this.scaleX*10/90*100,0,2*Math.PI);
+
+			context.stroke();
+		}
+
+		Constellation.prototype.drawSat = function(satno,elevation, azimuth, snr) {
+			var context = this.context;
+			satSize = (snr/10)*this.minScale
+			console.log(satSize)
+			polarevelation = (elevation*(10/9)*-1) +100
+			polarazimuth = (azimuth +270)/180 * Math.PI
+			var xpos = (polarevelation * Math.cos(polarazimuth)* this.minScale)+ this.centerX
+			var ypos = (polarevelation * Math.sin(polarazimuth)* this.minScale)+ this.centerY
+			context.beginPath();
+			context.arc(xpos,ypos,satSize,0,2*Math.PI);
+			context.fillStyle = 'black';
+			context.fill();
+			font = satSize + "pt Arial"
+			context.font = font;
+			context.fillStyle = 'white';
+			context.textAlign = "center";
+			context.textBaseline = "middle";
+			context.fillText(satno, xpos, ypos);
+		};
+
+		Constellation.prototype.drawPhaseAmp = function(phase,amp) {
+			var context = this.context;
+			var canvas = this.canvas;
+			context.clearRect(0, 0, canvas.width, canvas.height);
+			// satSize = (snr/10)*this.minScale
+			// console.log(satSize)
+			font = 10 + "pt Arial"
+			context.font = font;
+			context.fillStyle = 'white';
+			context.textAlign = "center";
+			context.textBaseline = "middle";
+			var points = phase.length;
+			for (var i = 0; i < points; i++) {
+				amp[i]*=i
+				// polarphase = (phase[i]*(10/9)*-1) +100
+				// polaramp = (amp[i] +270)/180 * Math.PI
+				var xpos = (amp[i] * Math.cos(phase[i])* this.minScale)+ this.centerX
+				var ypos = (amp[i] * Math.sin(phase[i])* this.minScale)+ this.centerY
+				context.beginPath();
+				context.arc(xpos,ypos,20,0,2*Math.PI);
+				context.fillStyle = "rgba(0, 0, 0, 0.5)";
+				context.fill();
+				context.fillStyle = 'white';
+				text = ((i*.04)+.4);
+				context.fillText(text.toFixed(2), xpos, ypos);
+			}
+
+
+		};
+
+
+		Constellation.prototype.transformContext = function() {
+			var context = this.context;
+			this.context.translate(this.centerX, this.centerY);
+			context.scale(this.scaleX, -this.scaleY);
+		};
+
+
+		var myConstellation = new Constellation({
+			canvasId: 'myCanvas',
+			minX: -100,
+			minY: -100,
+			maxX: 100,
+			maxY: 100,
+		});
+
+		var constellations;
+
+	  	var loc = window.location,
+	  	    websocket_uri;
+	  	if (loc.protocol === "https:") {
+	  	    websocket_uri = "wss:";
+	  	} else {
+	  	    websocket_uri = "ws:";
+	  	}
+	  	websocket_uri += "//" + loc.host + "/ws";
+
+	  	// conn = new WebSocket(websocket_uri);
+	    var conn = new ReconnectingWebSocket(websocket_uri);
+
+
+	  	console.log("Websocket URI: " + websocket_uri)
+
+	  	conn.onclose = function(e) {
+	        console.log("Websocket Closed")
+	  	};
+
+	    conn.onopen = function(e) {
+	            console.log("Websocket Open")
+	    };
+
+	    var WebsocketMessageCount = 0
+
+	    conn.onmessage = function(e) {
+			// console.log(e)
+	    	// WebsocketMessageCount++
+	      var data = JSON.parse(e.data);
+		  myConstellation.drawPhaseAmp(data.phase,data.amplitude)
+		//   console.log(data.phase)
+		// renderAmp(data.amplitude)
+		// 	renderPhase(data.phase)
+
+	    };
+
+
+
+		</script>
+	</body>
+</html>

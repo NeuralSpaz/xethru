@@ -20,6 +20,7 @@
 package xethru
 
 import (
+	"bufio"
 	"io"
 	"time"
 )
@@ -28,10 +29,13 @@ import (
 // it implements io.Reader and io.Writer
 func Open(device string, port io.ReadWriter) Framer {
 	// fmt.Println("New instance of Xethru")
-	if device == "x2m200" {
-		return x2m200Frame{w: port, r: port}
+	// if device == "x2m200" {
+	return &x2m200Frame{
+		w: port,
+		r: bufio.NewReader(port),
 	}
-	return x2m200Frame{w: port, r: port}
+	// }
+	// return &x2m200Frame{w: port, r: port}
 }
 
 // Framer is a wrapper for a serial protocol. it insets the start, crc and end bytes for you

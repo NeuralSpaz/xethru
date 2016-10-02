@@ -9,15 +9,17 @@ import (
 
 var (
 	_ledModeNameToValue = map[string]ledMode{
-		"LEDOff":    LEDOff,
-		"LEDSimple": LEDSimple,
-		"LEDFull":   LEDFull,
+		"LEDOff":        LEDOff,
+		"LEDSimple":     LEDSimple,
+		"LEDFull":       LEDFull,
+		"LEDInhalation": LEDInhalation,
 	}
 
 	_ledModeValueToName = map[ledMode]string{
-		LEDOff:    "LEDOff",
-		LEDSimple: "LEDSimple",
-		LEDFull:   "LEDFull",
+		LEDOff:        "LEDOff",
+		LEDSimple:     "LEDSimple",
+		LEDFull:       "LEDFull",
+		LEDInhalation: "LEDInhalation",
 	}
 )
 
@@ -25,9 +27,10 @@ func init() {
 	var v ledMode
 	if _, ok := interface{}(v).(fmt.Stringer); ok {
 		_ledModeNameToValue = map[string]ledMode{
-			interface{}(LEDOff).(fmt.Stringer).String():    LEDOff,
-			interface{}(LEDSimple).(fmt.Stringer).String(): LEDSimple,
-			interface{}(LEDFull).(fmt.Stringer).String():   LEDFull,
+			interface{}(LEDOff).(fmt.Stringer).String():        LEDOff,
+			interface{}(LEDSimple).(fmt.Stringer).String():     LEDSimple,
+			interface{}(LEDFull).(fmt.Stringer).String():       LEDFull,
+			interface{}(LEDInhalation).(fmt.Stringer).String(): LEDInhalation,
 		}
 	}
 }
