@@ -25,23 +25,21 @@
 package xethru
 
 import (
+	"bufio"
 	"errors"
 	"io"
+	"log"
 )
 
 type x2m200Frame struct {
 	w io.Writer
-	r io.Reader
+	r *bufio.Reader
+	// buf          []byte
+	// rpos, wpos   int // buf read and write positions
+	// err          error
+	// lastByte     int
+	// lastRuneSize int
 }
-
-// Flow Control bytes
-// startByte + [data] + CRC + endByte
-const (
-	startByte = 0x7D
-	endByte   = 0x7E
-	escByte   = 0x7F
-	errorByte = 0x20
-)
 
 type protocolError byte
 
@@ -51,7 +49,7 @@ const (
 	invaidAppID  protocolError = 0x03
 )
 
-func (x x2m200Frame) Write(p []byte) (n int, err error) {
+func (x *x2m200Frame) Write(p []byte) (n int, err error) {
 
 	p = append(p[:0], append([]byte{startByte}, p[0:]...)...)
 	// cant be error from checksum at we just set the startByte
@@ -74,68 +72,271 @@ func (x x2m200Frame) Write(p []byte) (n int, err error) {
 	return
 }
 
-func (x x2m200Frame) Read(b []byte) (n int, err error) {
+// const headerSize int = 2
+
+// Flow Control bytes
+// startByte + [data] + CRC + endByte
+const (
+	startByte = 0x7D
+	endByte   = 0x7E
+	escByte   = 0x7F
+	errorByte = 0x20
+)
+
+func (x *x2m200Frame) Read(b []byte) (n int, err error) {
 	// read from the reader
-	n, err = x.r.Read(b)
-	// x.r.buffio.ReadByte
-	// fmt.Printf("DEBUG Read: ")
-	// for i := 0; i < n; i++ {
-	// 	fmt.Printf("%#02x", b[i])
-	// }
-	// fmt.Printf("\n")
-	// should be at least 3 bytes (start,crc,end)
-	if n > 3 {
-		var last byte
-		// pop endByte
-		last, b = b[n-1], b[:n-1]
-		n--
-		if last != endByte {
-			return 0, errPacketNotEndbyte
+	// var n int
+	// var p byte
+	var s []byte
+	// var n int
+	header, err := x.r.Peek(1)
+	if header[0] == startByte {
+		// log.Printf("\n\n\n\nWe Got a startByte")
+		s, err = x.r.ReadBytes(endByte)
+
+		// fmt.Printf("DEBUG Read: ")
+		// for i := 0; i < len(s); i++ {
+		// 	fmt.Printf("%#02x ", s[i])
+		// }
+		// fmt.Printf("\n")
+
+		if err != nil {
+			log.Println("DEBUG READ BYTE ERROR ", err)
+			// n = copy(b, s)
+			return 0, err
 		}
 
-		// pop crcByte to check later
-		var crcByte byte
-		crcByte, b = b[n-1], b[:n-1]
-		n--
+		ok, _, p := validator(s)
+		// log.Printf("validator ok=%v err=%v\n", ok, err)
 
-		// delete escBytes
-		for i := 0; i < (n - 1); i++ {
-			if b[i] == escByte && b[i+1] == endByte {
-				b = b[:i+copy(b[i:], b[i+1:])]
-				n--
+		for !ok {
+			// scan to next endByte
+			s2, err := x.r.ReadBytes(endByte)
+			if err != nil {
+				log.Println("DEBUG READ BYTE ERROR ", err)
+				return 0, err
 			}
+			// fmt.Printf("DEBUG Read S2: ")
+			// for i := 0; i < len(s2); i++ {
+			// 	fmt.Printf("%#02x ", s2[i])
+			// }
+			// fmt.Printf("\n")
+			//
+			// fmt.Printf("DEBUG Read Before Append: ")
+			// for i := 0; i < len(s); i++ {
+			// 	fmt.Printf("%#02x ", s[i])
+			// }
+			// fmt.Printf("\n")
+
+			s = append(s, s2...)
+
+			// fmt.Printf("DEBUG Read After Append:  ")
+			// for i := 0; i < len(s); i++ {
+			// 	fmt.Printf("%#02x ", s[i])
+			// }
+			// fmt.Printf("\n")
+			ok, _, p = validator(s)
+			// log.Printf("validator take 2 ok=%v err=%v\n", ok, err)
 		}
-		// check crcbyte
-		crc, crcerr := checksum(&b)
-		if crcerr != nil {
-			return 0, errPacketNoStartByte
+		if ok {
+			n = copy(b, p)
+			return n, nil
 		}
-		if crcByte != crc {
-			return 0, errPacketBadCRC
-		}
-		// delete startByte
-		b = b[:0+copy(b[0:], b[1:])]
-		n--
-		// check for errors byte
-		if b[0] == errorByte {
-			switch protocolError(b[1]) {
-			case notReconsied:
-				return 0, errProtocolErrorNotReconsied
-			case crcFailed:
-				return 0, errProtocolErrorCRCfailed
-			case invaidAppID:
-				return 0, errProtocolErrorInvaidAppID
-			}
-		}
-		return n, nil
-	}
-	if err != nil {
-		return 0, err
+		// if err != nil {
+		// 	log.Println("DEBUG validator ERROR ", err)
+		// }
+		// for !ok {
+		// 	b = append(b, s...)
+		// 	s2, err := x.r.ReadBytes(endByte)
+		// 	if err != nil {
+		// 		log.Println("DEBUG READ BYTE ERROR ", err)
+		// 	}
+		// 	b = append(b, s...)
+		// 	ok, err = validator(b)
+		// 	if err != nil {
+		// 		log.Println("DEBUG validator ERROR ", err)
+		// 	}
+		// }
+		// if ok {
+		// 	n = copy(b, s)
+		// 	return n, nil
+		// }
+
+	} else {
+		return 0, errPacketNoStartByte
 	}
 	return 0, nil
+	// for {
+	// 	n, err = x.r.ReadBytes(endByte)
+	// }
+
+}
+
+func validator(b []byte) (bool, error, []byte) {
+	var k []byte
+	k = append(k, b...)
+
+	const (
+		wait = iota
+		startAfterStart
+		inMessage
+		afterEsc
+		done
+	)
+	var buf []byte
+	state := wait
+	for k, v := range b {
+		switch state {
+		case wait:
+			if v == startByte {
+				state = inMessage
+				buf = append(buf, v)
+				// fmt.Printf("DEBUG validator startByte:              ")
+				// for i := 0; i < len(buf); i++ {
+				// 	fmt.Printf("%#02x ", buf[i])
+				// }
+				// fmt.Printf("\n")
+			}
+		case inMessage:
+			// fmt.Printf("k = %d, len = %d\n", k, len(b))
+			if k == len(b)-1 {
+				state = done
+			} else if v == escByte {
+				state = afterEsc
+			} else {
+				state = inMessage
+				buf = append(buf, v)
+				// fmt.Printf("DEBUG validator inMessage:              ")
+				// for i := 0; i < len(buf); i++ {
+				// 	fmt.Printf("%#02x ", buf[i])
+				// }
+				// fmt.Printf("\n")
+			}
+		case afterEsc:
+			if v == endByte && k == len(b)-1 {
+				// fmt.Printf("DEBUG errPacketNotLongEnough:               ")
+				// for i := 0; i < len(buf); i++ {
+				// 	fmt.Printf("%#02x ", buf[i])
+				// }
+				// fmt.Printf("\n")
+				return false, errPacketNotLongEnough, nil
+			}
+			state = inMessage
+			buf = append(buf, v)
+			// fmt.Printf("DEBUG validator afterEsc:               ")
+			// for i := 0; i < len(buf); i++ {
+			// 	fmt.Printf("%#02x ", buf[i])
+			// }
+			// fmt.Printf("\n")
+		}
+	}
+
+	// fmt.Printf("DEBUG before crc:                       ")
+	// for i := 0; i < len(buf); i++ {
+	// 	fmt.Printf("%#02x ", buf[i])
+	// }
+	// fmt.Printf("\n")
+
+	var crcByte byte
+
+	n := len(buf)
+
+	crcByte, buf = buf[n-1], buf[:n-1]
+	n--
+
+	crc, crcerr := checksum(&buf)
+	// log.Printf("CRC %#02x, CRCBYTE %#02x", crc, crcByte)
+	if crcerr != nil {
+		return false, errPacketNoStartByte, nil
+	}
+
+	if crcByte != crc {
+		return false, errPacketBadCRC, nil
+	}
+
+	buf = buf[:0+copy(buf[0:], buf[1:])]
+	n--
+
+	// fmt.Printf("DEBUG validator:              ")
+	// for i := 0; i < len(buf); i++ {
+	// 	fmt.Printf("%#02x ", buf[i])
+	// }
+	// fmt.Printf("\n")
+
+	return true, nil, buf
+
+	// fmt.Printf("DEBUG validator:              ")
+	// for i := 0; i < len(k); i++ {
+	// 	fmt.Printf("%#02x ", k[i])
+	// }
+	// fmt.Printf("\n")
+	//
+	// n := len(k)
+	// // var last kyte
+	// // pop endByte
+	// _, k = k[n-1], k[:n-1]
+	// n--
+	//
+	// fmt.Printf("DEBUG validator pop endbyte:  ")
+	// for i := 0; i < len(k); i++ {
+	// 	fmt.Printf("%#02x ", k[i])
+	// }
+	// fmt.Printf("\n")
+	//
+	// // pop crcByte to check later
+	// var crcByte byte
+	// crcByte, k = k[n-1], k[:n-1]
+	// n--
+	//
+	// fmt.Printf("DEBUG validator pop crcbyte:  ")
+	// for i := 0; i < len(k); i++ {
+	// 	fmt.Printf("%#02x ", k[i])
+	// }
+	// fmt.Printf("\n")
+	//
+	// // delete escBytes
+	// for i := 0; i < (n - 1); i++ {
+	// 	if k[i] == escByte && k[i+1] == endByte {
+	// 		k = k[:i+copy(k[i:], k[i+1:])]
+	// 		n--
+	// 	}
+	// }
+	//
+	// fmt.Printf("DEBUG validator del escbytes: ")
+	// for i := 0; i < len(k); i++ {
+	// 	fmt.Printf("%#02x ", k[i])
+	// }
+	// fmt.Printf("\n")
+	//
+	// // check crcbyte
+	// crc, crcerr := checksum(&k)
+	// if crcerr != nil {
+	// 	return false, errPacketNoStartByte, nil
+	// }
+	// log.Printf("DEBUG validator CRC, crc %#02x, crcbyte %#02x ", crc, crcByte)
+	// if crcByte != crc {
+	// 	return false, errPacketBadCRC, nil
+	// }
+	// // delete startByte
+	// k = k[:0+copy(k[0:], k[1:])]
+	// n--
+	// // check for errors byte
+	// if k[0] == errorByte {
+	// 	switch protocolError(k[1]) {
+	// 	case notReconsied:
+	// 		return false, errProtocolErrorNotReconsied, nil
+	// 	case crcFailed:
+	// 		return false, errProtocolErrorCRCfailed, nil
+	// 	case invaidAppID:
+	// 		return false, errProtocolErrorInvaidAppID, nil
+	// 	}
+	// }
+	//
+
 }
 
 var (
+	errPacketNotLongEnough       = errors.New("not long enough")
 	errPacketNoStartByte         = errors.New("no startbyte")
 	errPacketNotEndbyte          = errors.New("does not end with endbyte")
 	errPacketBadCRC              = errors.New("failed checksum")

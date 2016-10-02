@@ -1,0 +1,253 @@
+<html lang="en" >
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="/css/bootstrap.min.css">
+    <script src="/js/reconnecting-websocket.min.js"></script>
+	<script src="/js/angular.min.js"></script>
+	<title>Xethru</title>
+
+</head>
+<body ng-app="xethru" >
+<div ng-controller="basebandCtrl" class="container col-md-12">
+
+
+	  <canvas id="amplitude_render"></canvas>
+	  <canvas id="phase_render"></canvas>
+	  <canvas id="polar_render"></canvas>
+
+<!--
+	<div class="container col-md-10">
+		<div>
+			<table class="table table-striped table-condensed">
+				<thead>
+					<tr>
+
+						<th>TimeStamp</th>
+						<th>Counter</th>
+
+						<th>Bins</th>
+						<th>Bin Size(m)</th>
+						<th>Ping Rate (Gsps)</th>
+						<th>Center Freq (Ghz)</th>
+
+						<th>Offset(m)</th>
+						<th>Amplitue</th>
+						<th>Phase</th>
+					</tr>
+				</thead>
+
+				<tbody>
+					<tr ng-repeat="a in array">
+					<td>{{a.time}}</td>
+					<td>{{a.counter | number : 0 }}</td>
+					<td>{{a.bins | number : 0 }}</td>
+					<td>{{a.binlength | number : 2 }}</td>
+					<td>{{a.samplingfreq/1000000000 | number : 2 }} </td>
+					<td>{{a.carrierfreq/1000000000 | number : 2 }} </td>
+					<td>{{a.rangeoffset | number : 1 }}</td>
+					<td>{{a.amplitude}}</td>
+					<td>{{a.phase}}</td>
+
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</div> -->
+
+</div>
+
+
+
+<script>
+	function PolarPlot(config) {
+		this.canvas = document.getElementById(config.canvasId);
+
+		this.minX = config.minX;
+		this.minY = config.minY;
+		this.maxX = config.maxX;
+		this.maxY = config.maxY;
+		this.unitsPerTick = config.unitsPerTick;
+
+		this.axisColor = '#aaa';
+		this.font = '8pt Calibri';
+		this.tickSize = 20;
+
+		if (window.innerWidth > window.innerHeight) {
+			console.log("inner biger than window")
+			this.canvas.width = window.innerHeight;
+			this.canvas.height = window.innerHeight;
+			this.canvas.width = document.body.clientHeight;
+			this.canvas.height = document.body.clientHeight;
+		} else {
+			console.log("not biger than window")
+			this.canvas.width = window.innerWidth;
+			this.canvas.height = window.innerWidth;
+			this.canvas.width = document.body.clientWidth;
+			this.canvas.height = document.body.clientWidth/(6/4);
+		}
+
+		this.context = this.canvas.getContext('2d');
+		this.rangeX = this.maxX - this.minX;
+		this.rangeY = this.maxY - this.minY;
+		this.unitX = this.canvas.width / this.rangeX;
+		this.unitY = this.canvas.height / this.rangeY;
+		this.centerY = Math.round(Math.abs(this.minY / this.rangeY) * this.canvas.height);
+		this.centerX = Math.round(Math.abs(this.minX / this.rangeX) * this.canvas.width);
+		this.iteration = (this.maxX - this.minX) / 1000;
+		this.scaleX = this.canvas.width / this.rangeX;
+		this.scaleY = this.canvas.height / this.rangeY;
+		if (this.scaleX >=  this.scaleY) {
+			this.minScale = this.scaleY
+		} else {
+			this.minScale = this.scaleX
+		}
+
+		// this.drawXAxis();
+		// this.drawYAxis();
+		// this.drawCircularAxis();
+	}
+
+	PolarPlot.prototype.drawPhaseAmp = function(phase,amp) {
+		var context = this.context;
+		var canvas = this.canvas;
+		context.clearRect(0, 0, canvas.width, canvas.height);
+		// satSize = (snr/10)*this.minScale
+		// console.log(phase)
+		font = 10 + "pt Arial"
+		context.font = font;
+		context.fillStyle = 'white';
+		context.textAlign = "center";
+		context.textBaseline = "middle";
+		var points = phase.length;
+		for (var i = 0; i < points; i++) {
+			amp[i]*=i
+			// polarphase = (phase[i]*(10/9)*-1) +100
+			// polaramp = (amp[i] +270)/180 * Math.PI
+			var xpos = (amp[i] * Math.cos(phase[i])* this.minScale)+ this.centerX
+			var ypos = (amp[i] * Math.sin(phase[i])* this.minScale)+ this.centerY
+			context.beginPath();
+			context.arc(xpos,ypos,20,0,2*Math.PI);
+			context.fillStyle = "rgba(0, 0, 0, 0.5)";
+			context.fill();
+			context.fillStyle = 'white';
+			text = ((i*.04)+.4);
+			context.fillText(text.toFixed(2), xpos, ypos);
+		}
+	};
+
+	var ampcanvas, ampctx, phasecanvas, phasectx, source, context, analyser, fbc_array, bars, bar_x, bar_width, bar_height;
+	ampcanvas = document.getElementById('amplitude_render');
+	// ampcanvas.width = 800
+	ampctx = ampcanvas.getContext('2d');
+
+	phasecanvas = document.getElementById('phase_render');
+	phasectx = phasecanvas.getContext('2d');
+
+	var app = angular.module("xethru", []);
+
+	app.controller("basebandCtrl", ["$scope", function($scope) {
+
+	$scope.array = [];
+
+  	var loc = window.location,
+  	    websocket_uri;
+  	if (loc.protocol === "https:") {
+  	    websocket_uri = "wss:";
+  	} else {
+  	    websocket_uri = "ws:";
+  	}
+  	websocket_uri += "//" + loc.host + "/ws";
+
+	var polar = new PolarPlot({
+		canvasId: 'polar_render',
+		minX: -100,
+		minY: -100,
+		maxX: 100,
+		maxY: 100,
+	});
+
+  	// conn = new WebSocket(websocket_uri);
+    var conn = new ReconnectingWebSocket(websocket_uri);
+
+  	$scope.wsStatus = false;
+
+  	console.log("Websocket URI: " + websocket_uri)
+
+  	conn.onclose = function(e) {
+  	  $scope.$apply(function() {
+        console.log("Websocket Closed")
+  	    $scope.wsStatus = false;
+  	  });
+  	};
+
+    conn.onopen = function(e) {
+        $scope.$apply(function() {
+            console.log("Websocket Open")
+            $scope.wsStatus = true;
+        })
+    };
+
+    var WebsocketMessageCount = 0
+
+    conn.onmessage = function(e) {
+		// console.log(e)
+    	// WebsocketMessageCount++
+      var data = JSON.parse(e.data);
+	//   console.log(data)
+      if ($scope.array.length > 20) {
+      	$scope.array.splice(0,1)
+      }
+      // console.log(wsData);
+      $scope.$apply(function() {
+      	// console.log(data);
+        $scope.array.push(data)
+		// draw(data.amplitude)
+		// console.log(data.amplitude)
+		// ctx.clearRect(0, 0, canvas.width, canvas.height);
+		renderAmp(data.amplitude)
+		renderPhase(data.phase)
+		polar.drawPhaseAmp(data.phase,data.amplitude)
+       });
+    };
+
+
+function renderAmp(data) {
+	ampctx.canvas.width  = window.innerWidth-50;
+	ampctx.canvas.height  = window.innerHeight/6;
+	ampctx.clearRect(0, 0, ampcanvas.width, ampcanvas.height);
+	ampctx.fillStyle = '#00CCFF'; // Color of the bars
+	bars = data.length;
+	for (var i = 0; i < bars; i++) {
+		bar_x = i * ampcanvas.width/bars;
+		bar_width = (ampcanvas.width/bars)-2;
+		bar_height = -(data[i] *1000)*1/ampcanvas.height*i;
+		//  fillRect( x, y, width, height ) // Explanation of the parameters below
+		ampctx.fillRect(bar_x, ampcanvas.height, bar_width, bar_height);
+	}
+}
+
+function renderPhase(data) {
+	phasectx.canvas.width  = window.innerWidth-50;
+	phasectx.canvas.height  = window.innerHeight/6;
+	phasectx.clearRect(0, 0, phasecanvas.width, phasecanvas.height);
+	phasectx.fillStyle = '#42f4b6'; // Color of the bars
+	bars = data.length;
+	for (var i = 0; i < bars; i++) {
+		bar_x = i * ampcanvas.width/bars;
+		bar_width = (ampcanvas.width/bars)-2;
+		bar_height = (data[i] *10);
+		//  fillRect( x, y, width, height ) // Explanation of the parameters below
+		phasectx.fillRect(bar_x, phasecanvas.height/2, bar_width, bar_height);
+	}
+}
+
+
+
+	}]);
+
+
+
+</script>
+
+</body>
