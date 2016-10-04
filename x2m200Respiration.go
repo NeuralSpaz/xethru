@@ -35,7 +35,7 @@ type Sleep struct {
 	Status        status
 	Counter       uint32
 	State         respirationState
-	RPM           uint32
+	RPM           float64
 	Distance      float64
 	SignalQuality float64
 	MovementSlow  float64
@@ -518,7 +518,7 @@ func parseSleep(b []byte) (interface{}, error) {
 	data.Status = status(binary.LittleEndian.Uint32(b[1:5]))
 	data.Counter = binary.LittleEndian.Uint32(b[5:9])
 	data.State = respirationState(binary.LittleEndian.Uint32(b[9:13]))
-	data.RPM = binary.LittleEndian.Uint32(b[13:17])
+	data.RPM = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[13:17])))
 	data.Distance = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[17:21])))
 	data.SignalQuality = float64(binary.LittleEndian.Uint32(b[21:25]))
 	data.MovementSlow = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[25:29])))
