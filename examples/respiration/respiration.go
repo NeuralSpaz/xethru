@@ -42,10 +42,13 @@ func main() {
 	flag.Parse()
 
 	baseband := make(chan xethru.BaseBandAmpPhase)
+	resp := make(chan xethru.Respiration)
 
-	go openXethru(*commPort, *baudrate, baseband)
-	connections = make(map[*websocket.Conn]bool)
-	http.HandleFunc("/ws", wsHandler)
+	go openXethru(*commPort, *baudrate, baseband, resp)
+	baseBandconnections = make(map[*websocket.Conn]bool)
+	respirationconnections = make(map[*websocket.Conn]bool)
+	http.HandleFunc("/ws/bb", baseBandwsHandler)
+	http.HandleFunc("/ws/r", respirationwsHandler)
 
 	// http.HandleFunc("/", indexHandler)
 	http.Handle("/", http.FileServer(http.Dir("./www")))
@@ -64,40 +67,22 @@ func main() {
 			if err != nil {
 				log.Panicln("Error Marshaling: ", err)
 			}
-			sendAll(b)
+			sendBaseBand(b)
+		case data := <-resp:
+			b, err := json.Marshal(data)
+			if err != nil {
+				log.Panicln("Error Marshaling: ", err)
+			}
+			sendrespiration(b)
 		}
 	}
 
 }
 
-func sendAll(msg []byte) {
-	connectMutex.Lock()
-	for conn := range connections {
-		if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-			delete(connections, conn)
-			conn.Close()
-		}
-	}
-	connectMutex.Unlock()
-}
+var respirationconnectionsMutex sync.Mutex
+var respirationconnections map[*websocket.Conn]bool
 
-// func indexHandler(w http.ResponseWriter, r *http.Request) {
-// 	file, err := ioutil.ReadFile("index.html")
-// 	// defer file.Close()
-// 	if err != nil {
-// 		log.Panic(err)
-// 	}
-// 	// ioutil.ReadFile(filename)
-// 	// file.Read(b)
-// 	// file, _ := Asset("index.html")
-// 	w.Header().Set("Content-Type", "text/html")
-// 	w.Write(file)
-// }
-
-var connectMutex sync.Mutex
-var connections map[*websocket.Conn]bool
-
-func wsHandler(w http.ResponseWriter, r *http.Request) {
+func respirationwsHandler(w http.ResponseWriter, r *http.Request) {
 	// Taken from gorilla's website
 	conn, err := websocket.Upgrade(w, r, nil, 1024, 1024)
 	if _, ok := err.(websocket.HandshakeError); ok {
@@ -108,18 +93,18 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Println("Succesfully upgraded connection")
-	connectMutex.Lock()
-	connections[conn] = true
-	connectMutex.Unlock()
+	respirationconnectionsMutex.Lock()
+	respirationconnections[conn] = true
+	respirationconnectionsMutex.Unlock()
 
 	for {
 		// Blocks until a message is read
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			connectMutex.Lock()
+			respirationconnectionsMutex.Lock()
 			log.Printf("Disconnecting %v because %v\n", conn, err)
-			delete(connections, conn)
-			connectMutex.Unlock()
+			delete(respirationconnections, conn)
+			respirationconnectionsMutex.Unlock()
 			conn.Close()
 			return
 		}
@@ -127,7 +112,62 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase) {
+func sendrespiration(msg []byte) {
+	respirationconnectionsMutex.Lock()
+	for conn := range respirationconnections {
+		if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			delete(respirationconnections, conn)
+			conn.Close()
+		}
+	}
+	respirationconnectionsMutex.Unlock()
+}
+
+var baseBandconnectionsMutex sync.Mutex
+var baseBandconnections map[*websocket.Conn]bool
+
+func baseBandwsHandler(w http.ResponseWriter, r *http.Request) {
+	// Taken from gorilla's website
+	conn, err := websocket.Upgrade(w, r, nil, 1024, 1024)
+	if _, ok := err.(websocket.HandshakeError); ok {
+		http.Error(w, "Not a websocket handshake", 400)
+		return
+	} else if err != nil {
+		log.Println(err)
+		return
+	}
+	log.Println("Succesfully upgraded connection")
+	baseBandconnectionsMutex.Lock()
+	baseBandconnections[conn] = true
+	baseBandconnectionsMutex.Unlock()
+
+	for {
+		// Blocks until a message is read
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			baseBandconnectionsMutex.Lock()
+			log.Printf("Disconnecting %v because %v\n", conn, err)
+			delete(baseBandconnections, conn)
+			baseBandconnectionsMutex.Unlock()
+			conn.Close()
+			return
+		}
+		log.Println(msg)
+	}
+}
+
+func sendBaseBand(msg []byte) {
+	baseBandconnectionsMutex.Lock()
+	for conn := range baseBandconnections {
+		if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			delete(baseBandconnections, conn)
+			conn.Close()
+		}
+	}
+	baseBandconnectionsMutex.Unlock()
+}
+
+func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase, resp chan xethru.Respiration) {
 	online, err := exists(comm)
 	if err != nil {
 		log.Fatal(err)
@@ -188,7 +228,7 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 		log.Fatalf("serial.Open: %v", err)
 	}
 	time.Sleep(time.Second * 1)
-	port.Flush()
+	// port.Flush()
 
 	defer port.Close()
 	x2 = xethru.Open("x2m200", port)
@@ -211,7 +251,7 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 	time.Sleep(time.Second * 10)
 
 	log.Println("SetSensitivity")
-	m.SetSensitivity(9)
+	m.SetSensitivity(7)
 	time.Sleep(time.Second * 1)
 	m.Enable("phase")
 	// time.Sleep(time.Second * 5)
@@ -229,7 +269,14 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 	}
 	defer respirationfile.Close()
 
+	sleepfile, err := os.Create("./sleep.json")
+	if err != nil {
+		log.Panic(err)
+	}
+	defer sleepfile.Close()
+
 	// basebandenc := json.NewEncoder(basebandfile)
+	sleepenc := json.NewEncoder(sleepfile)
 	respirationenc := json.NewEncoder(respirationfile)
 	// respirationscreenenc := json.NewEncoder(os.Stdout)
 
@@ -239,6 +286,7 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 		case s := <-stream:
 			switch s.(type) {
 			case xethru.Respiration:
+				resp <- s.(xethru.Respiration)
 				// if err := respirationscreenenc.Encode(&s); err != nil {
 				// 	log.Println(err)
 				// }
@@ -250,8 +298,19 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 				// if err := basebandenc.Encode(&s); err != nil {
 				// 	log.Println(err)
 				// }
-
+			case xethru.Sleep:
+				s = s.(xethru.Sleep)
+				// sleep <- s.(xethru.Sleep)
+				// if err := respirationscreenenc.Encode(&s); err != nil {
+				// 	log.Println(err)
+				// }
+				if err := sleepenc.Encode(&s); err != nil {
+					log.Println(err)
+				}
+			default:
+				log.Printf("%#v", s)
 			}
+
 		}
 		// if frameCounter%100 == 0 {
 		// basebandfile.Sync()

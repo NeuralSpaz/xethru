@@ -25,13 +25,14 @@ type status uint32
 //go:generate jsonenums -type=status
 //go:generate stringer -type=status
 const (
-	respApp status = 594935334
+	respApp  status = 594935334
+	sleepAPP status = 594911596
 )
 
 // Sleep is the struct
 type Sleep struct {
 	Time          int64
-	Status        uint32
+	Status        status
 	Counter       uint32
 	State         respirationState
 	RPM           uint32
@@ -56,7 +57,7 @@ type BaseBandAmpPhase struct {
 }
 
 //go:generate jsonenums -type=respirationState
-//go:generate stringer -type=respirationState174
+//go:generate stringer -type=respirationState
 const (
 	breathing      respirationState = 0
 	movement       respirationState = 1
@@ -498,7 +499,7 @@ var (
 )
 
 func parseSleep(b []byte) (interface{}, error) {
-
+	// console.log
 	// log.Printf("%02x %d\n", b, len(b))
 	if len(b) == 0 {
 		return Sleep{}, errParseSleepDataNoData
@@ -514,7 +515,7 @@ func parseSleep(b []byte) (interface{}, error) {
 	}
 	data := Sleep{}
 	data.Time = time.Now().UnixNano()
-	data.Status = binary.LittleEndian.Uint32(b[1:5])
+	data.Status = status(binary.LittleEndian.Uint32(b[1:5]))
 	data.Counter = binary.LittleEndian.Uint32(b[5:9])
 	data.State = respirationState(binary.LittleEndian.Uint32(b[9:13]))
 	data.RPM = binary.LittleEndian.Uint32(b[13:17])
