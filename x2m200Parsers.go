@@ -9,45 +9,46 @@ import (
 )
 
 const (
-	appDataByte            = 0x50
-	respirationStartByte   = 0x26
-	sleepStartByte         = 0x6c
-	phaseAmpltudeStartByte = 0x0d
+	appDataByte                    = 0x50
+	respirationStartByte           = 0x26
+	sleepStartByte                 = 0x6c
+	basebandPhaseAmpltudeStartByte = 0x0d
+	basebandIQStartByte            = 0x0c
 )
 
 func parse(b []byte) (interface{}, error) {
 	// log.Printf("%02x\n", b)
 	if len(b) == 0 {
-		return Respiration{}, errNoData
+		return nil, errNoData
 	}
-	if b[0] != appDataByte {
-		return nil, errors.New("Not Apllication Data")
-	}
-	switch b[1] {
-	case respirationStartByte:
-		resp, err := parseRespiration(b)
-		return resp, err
-	case sleepStartByte:
-		return parseSleep(b)
-	case phaseAmpltudeStartByte:
-		return parseBaseBandAP(b)
+	switch b[0] {
+	case appDataByte:
+		switch b[1] {
+		case respirationStartByte:
+			resp, err := parseRespiration(b)
+			return resp, err
+		case sleepStartByte:
+			return parseSleep(b)
+		case basebandPhaseAmpltudeStartByte:
+			return parseBaseBandAP(b)
+		case basebandIQStartByte:
+			return parseBaseBandIQ(b)
+		default:
+			return nil, errParseNotImplemented
+		}
 	default:
-		return nil, errors.New("Not Implemented")
+		return nil, errParseNotImplemented
 	}
 }
 
+var (
+	errParseNotImplemented = errors.New("Parser not implemented")
+	errNoData              = errors.New("no data to parse")
+)
+
 func parseRespiration(b []byte) (Respiration, error) {
-	// log.Printf("%02x\n", b)
-	if len(b) == 0 {
-		return Respiration{}, errNoData
-	}
-	if b[0] != appDataByte {
-		return Respiration{}, errors.New("Not Apllication Data")
-	}
-	if b[1] != respirationStartByte {
-		return Respiration{}, errParseRespDataNoResoirationByte
-	}
-	if len(b) < 29 {
+	// Check to make sure respiration data is long enough
+	if len(b) != 29 {
 		return Respiration{}, errParseRespDataNotEnoughBytes
 	}
 	data := Respiration{}
@@ -65,24 +66,12 @@ func parseRespiration(b []byte) (Respiration, error) {
 }
 
 var (
-	errParseRespDataNoResoirationByte = errors.New("does not start with respiration byte")
-	errParseRespDataNotEnoughBytes    = errors.New("response does not contain enough bytes")
-	errNoData                         = errors.New("no data to parse")
+	errParseRespDataNotEnoughBytes = errors.New("response does not contain enough bytes")
 )
 
-func parseSleep(b []byte) (interface{}, error) {
-	// console.log
-	// log.Printf("%02x %d\n", b, len(b))
-	if len(b) == 0 {
-		return Sleep{}, errParseSleepDataNoData
-	}
-	if b[0] != appDataByte {
-		return nil, errors.New("Not Apllication Data")
-	}
-	if b[1] != sleepStartByte {
-		return Sleep{}, errParseSleepDataNoResoirationByte
-	}
-	if len(b) < 30 {
+func parseSleep(b []byte) (Sleep, error) {
+	// Make sure we have enough bytes to parse packet without panic
+	if len(b) != 33 {
 		return Sleep{}, errParseSleepDataNotEnoughBytes
 	}
 	data := Sleep{}
@@ -100,9 +89,7 @@ func parseSleep(b []byte) (interface{}, error) {
 }
 
 var (
-	errParseSleepDataNoResoirationByte = errors.New("does not start with respiration byte")
-	errParseSleepDataNotEnoughBytes    = errors.New("response does not contain enough bytes")
-	errParseSleepDataNoData            = errors.New("no data to parse")
+	errParseSleepDataNotEnoughBytes = errors.New("response does not contain enough bytes")
 )
 
 const (
@@ -114,17 +101,7 @@ const (
 )
 
 func parseBaseBandAP(b []byte) (BaseBandAmpPhase, error) {
-	if len(b) < 1 {
-		return BaseBandAmpPhase{}, errParseBaseBandAPNoData
-	}
-
-	if b[0] != appDataByte {
-		return BaseBandAmpPhase{}, errors.New("Not Apllication Data")
-	}
-
-	if b[1] != phaseAmpltudeStartByte {
-		return BaseBandAmpPhase{}, errParseBaseBandAPNotBaseBand
-	}
+	// Make sure we have enough bytes to parse header without panic
 	if len(b) < apheadersize {
 		return BaseBandAmpPhase{}, errParseBaseBandAPNotEnoughBytes
 	}
@@ -156,32 +133,19 @@ func parseBaseBandAP(b []byte) (BaseBandAmpPhase, error) {
 		phase := float64(math.Float32frombits(binary.LittleEndian.Uint32(b[i : i+4])))
 		ap.Phase = append(ap.Phase, phase)
 	}
-	// log.Println(ap)
-
-	// b, err := json.MarshalIndent(ap, "\t", "")
-	// if err != nil {
-	// 	fmt.Println("error:", err)
-	// }
-	// os.Stdout.Write(b)
-
 	return ap, nil
 }
 
 var (
-	errParseBaseBandAPNoData           = errors.New("baseband data is zero length")
-	errParseBaseBandAPNotBaseBand      = errors.New("baseband data does not start with x2m200AppData")
+	// errParseBaseBandAPNoData           = errors.New("baseband data is zero length")
+	// errParseBaseBandAPNotBaseBand      = errors.New("baseband data does not start with x2m200AppData")
 	errParseBaseBandAPNotEnoughBytes   = errors.New("baseband data does contain enough bytes")
 	errParseBaseBandAPDataHeader       = errors.New("baseband data does contain ap baseband header")
 	errParseBaseBandAPIncompletePacket = errors.New("baseband data does contain a full packet of data")
 )
 
 func parseBaseBandIQ(b []byte) (BaseBandIQ, error) {
-	if len(b) < 1 {
-		return BaseBandIQ{}, errParseBaseBandIQNoData
-	}
-	if b[0] != appDataByte {
-		return BaseBandIQ{}, errParseBaseBandIQNotBaseBand
-	}
+	// Make sure we have enough bytes to parse header without panic
 	if len(b) < iqheadersize {
 		return BaseBandIQ{}, errParseBaseBandIQNotEnoughBytes
 	}
