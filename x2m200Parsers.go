@@ -3,7 +3,6 @@ package xethru
 import (
 	"encoding/binary"
 	"errors"
-	"log"
 	"math"
 	"time"
 )
@@ -15,6 +14,43 @@ const (
 	basebandPhaseAmpltudeStartByte = 0x0d
 	basebandIQStartByte            = 0x0c
 )
+
+// type Parser interface {
+// 	Parse([]byte) error
+// }
+//
+// type RespirationApp struct {
+// 	n int
+// }
+//
+// func Mangle(p Parser) {}
+
+//
+// type SleepApp struct {
+// 	n int
+// }
+//
+// type BaseBandAPApp struct {
+// 	n int
+// }
+//
+// type BaseBandIQApp struct {
+// 	n int
+// }
+//
+// func (r RespirationApp) Parse(b []byte) error {
+// 	return nil
+// }
+
+// func (r SleepApp) Parse(b []byte) error {
+// 	return nil
+// }
+// func (r BaseBandAPApp) Parse(b []byte) error {
+// 	return nil
+// }
+// func (r BaseBandIQApp) Parse(b []byte) error {
+// 	return nil
+// }
 
 func parse(b []byte) (interface{}, error) {
 	// log.Printf("%02x\n", b)
@@ -46,9 +82,11 @@ var (
 	errNoData              = errors.New("no data to parse")
 )
 
+const respsize = 29
+
 func parseRespiration(b []byte) (Respiration, error) {
 	// Check to make sure respiration data is long enough
-	if len(b) != 29 {
+	if len(b) != respsize {
 		return Respiration{}, errParseRespDataNotEnoughBytes
 	}
 	data := Respiration{}
@@ -69,9 +107,11 @@ var (
 	errParseRespDataNotEnoughBytes = errors.New("response does not contain enough bytes")
 )
 
+const sleepsize = 33
+
 func parseSleep(b []byte) (Sleep, error) {
 	// Make sure we have enough bytes to parse packet without panic
-	if len(b) != 33 {
+	if len(b) != sleepsize {
 		return Sleep{}, errParseSleepDataNotEnoughBytes
 	}
 	data := Sleep{}
@@ -92,27 +132,16 @@ var (
 	errParseSleepDataNotEnoughBytes = errors.New("response does not contain enough bytes")
 )
 
-const (
-	x2m200AppData    = 0x50
-	x2m200BaseBandIQ = 0x0C
-	x2m200BaseBandAP = 0x0D
-	iqheadersize     = 29
-	apheadersize     = 29
-)
+const apheadersize = 29
 
 func parseBaseBandAP(b []byte) (BaseBandAmpPhase, error) {
 	// Make sure we have enough bytes to parse header without panic
 	if len(b) < apheadersize {
 		return BaseBandAmpPhase{}, errParseBaseBandAPNotEnoughBytes
 	}
-	x2m200basebandap := binary.LittleEndian.Uint32(b[1:5])
-	if x2m200basebandap != x2m200BaseBandAP {
-		log.Println(x2m200basebandap, x2m200BaseBandAP)
-		return BaseBandAmpPhase{}, errParseBaseBandAPDataHeader
-	}
-
 	var ap BaseBandAmpPhase
 	ap.Time = time.Now().UnixNano()
+	ap.Status = status(binary.LittleEndian.Uint32(b[1:5]))
 	ap.Counter = binary.LittleEndian.Uint32(b[5:9])
 	ap.Bins = binary.LittleEndian.Uint32(b[9:13])
 	ap.BinLength = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[13:17])))
@@ -137,26 +166,22 @@ func parseBaseBandAP(b []byte) (BaseBandAmpPhase, error) {
 }
 
 var (
-	// errParseBaseBandAPNoData           = errors.New("baseband data is zero length")
-	// errParseBaseBandAPNotBaseBand      = errors.New("baseband data does not start with x2m200AppData")
 	errParseBaseBandAPNotEnoughBytes   = errors.New("baseband data does contain enough bytes")
-	errParseBaseBandAPDataHeader       = errors.New("baseband data does contain ap baseband header")
 	errParseBaseBandAPIncompletePacket = errors.New("baseband data does contain a full packet of data")
 )
+
+const iqheadersize = 29
 
 func parseBaseBandIQ(b []byte) (BaseBandIQ, error) {
 	// Make sure we have enough bytes to parse header without panic
 	if len(b) < iqheadersize {
 		return BaseBandIQ{}, errParseBaseBandIQNotEnoughBytes
 	}
-	x2m200basebandiq := binary.LittleEndian.Uint32(b[1:5])
-	if x2m200basebandiq != x2m200BaseBandIQ {
-		// log.Println(x2m200basebandiq, x2m200BaseBandIQ)
-		return BaseBandIQ{}, errParseBaseBandIQDataHeader
-	}
 
 	var iq BaseBandIQ
+
 	iq.Time = time.Now().UnixNano()
+	iq.Status = status(binary.LittleEndian.Uint32(b[1:5]))
 	iq.Counter = binary.LittleEndian.Uint32(b[5:9])
 	iq.Bins = binary.LittleEndian.Uint32(b[9:13])
 	iq.BinLength = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[13:17])))
@@ -183,9 +208,6 @@ func parseBaseBandIQ(b []byte) (BaseBandIQ, error) {
 }
 
 var (
-	errParseBaseBandIQNoData           = errors.New("baseband data is zero length")
-	errParseBaseBandIQNotBaseBand      = errors.New("baseband data does not start with x2m200AppData")
 	errParseBaseBandIQNotEnoughBytes   = errors.New("baseband data does contain enough bytes")
-	errParseBaseBandIQDataHeader       = errors.New("baseband data does contain iq baseband header")
 	errParseBaseBandIQIncompletePacket = errors.New("baseband data does contain a full packet of data")
 )

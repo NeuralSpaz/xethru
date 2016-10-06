@@ -5,21 +5,25 @@ package xethru
 import "fmt"
 
 const (
-	_status_name_0 = "sleepApp"
-	_status_name_1 = "respApp"
+	_status_name_0 = "basebandAP"
+	_status_name_1 = "sleepApp"
+	_status_name_2 = "respApp"
 )
 
 var (
-	_status_index_0 = [...]uint8{0, 8}
-	_status_index_1 = [...]uint8{0, 7}
+	_status_index_0 = [...]uint8{0, 10}
+	_status_index_1 = [...]uint8{0, 8}
+	_status_index_2 = [...]uint8{0, 7}
 )
 
 func (i status) String() string {
 	switch {
-	case i == 594911596:
+	case i == 13:
 		return _status_name_0
-	case i == 594935334:
+	case i == 594911596:
 		return _status_name_1
+	case i == 594935334:
+		return _status_name_2
 	default:
 		return fmt.Sprintf("status(%d)", i)
 	}

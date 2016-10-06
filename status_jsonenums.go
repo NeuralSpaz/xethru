@@ -9,13 +9,15 @@ import (
 
 var (
 	_statusNameToValue = map[string]status{
-		"respApp":  respApp,
-		"sleepApp": sleepApp,
+		"respApp":    respApp,
+		"sleepApp":   sleepApp,
+		"basebandAP": basebandAP,
 	}
 
 	_statusValueToName = map[status]string{
-		respApp:  "respApp",
-		sleepApp: "sleepApp",
+		respApp:    "respApp",
+		sleepApp:   "sleepApp",
+		basebandAP: "basebandAP",
 	}
 )
 
@@ -23,8 +25,9 @@ func init() {
 	var v status
 	if _, ok := interface{}(v).(fmt.Stringer); ok {
 		_statusNameToValue = map[string]status{
-			interface{}(respApp).(fmt.Stringer).String():  respApp,
-			interface{}(sleepApp).(fmt.Stringer).String(): sleepApp,
+			interface{}(respApp).(fmt.Stringer).String():    respApp,
+			interface{}(sleepApp).(fmt.Stringer).String():   sleepApp,
+			interface{}(basebandAP).(fmt.Stringer).String(): basebandAP,
 		}
 	}
 }
