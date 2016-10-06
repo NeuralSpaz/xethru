@@ -179,7 +179,7 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 			log.Fatal(err)
 		}
 	}
-	time.Sleep(time.Millisecond * 5000)
+	time.Sleep(time.Millisecond * 2000)
 
 	c := &serial.Config{Name: comm, Baud: baudrate}
 	port, err := serial.OpenPort(c)
@@ -194,7 +194,7 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 	//
 	// port, err := serial.Open(options)
 	if err != nil {
-		log.Fatalf("serial.Open: %v", err)
+		log.Printf("serial.Open: %v\n", err)
 	}
 	port.Flush()
 
@@ -202,7 +202,7 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 
 	reset, err := x2.Reset()
 	if err != nil {
-		log.Fatalf("serial.Open: %v", err)
+		log.Printf("serial.Reset: %v\n", err)
 	}
 	log.Println(reset)
 	port.Close()
@@ -219,7 +219,7 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 			log.Fatal(err)
 		}
 	}
-
+	// time.Sleep(time.Millisecond * 5000)
 	time.Sleep(time.Millisecond * 10000)
 
 	// port, err = serial.Open(options)
@@ -244,15 +244,15 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 	log.Println("Setting LED MODE")
 	m.LEDMode = xethru.LEDInhalation
 	m.SetLEDMode()
-	time.Sleep(time.Second * 1)
+	// time.Sleep(time.Second * 1)
 
 	log.Println("SetDetectionZone")
 	m.SetDetectionZone(0.5, 2.1)
-	time.Sleep(time.Second * 10)
+	// time.Sleep(time.Second * 10)
 
 	log.Println("SetSensitivity")
 	m.SetSensitivity(7)
-	time.Sleep(time.Second * 1)
+	// time.Sleep(time.Second * 1)
 	m.Enable("phase")
 	// time.Sleep(time.Second * 5)
 	stream := make(chan interface{})

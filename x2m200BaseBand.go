@@ -25,25 +25,7 @@
 
 package xethru
 
-import (
-	"encoding/binary"
-	"errors"
-	"math"
-	"time"
-)
-
 // BaseBandIQ is the struct
-type BaseBandIQ struct {
-	Time         int64     `json:"time"`
-	Counter      uint32    `json:"counter"`
-	Bins         uint32    `json:"bins"`
-	BinLength    float64   `json:"binlength"`
-	SamplingFreq float64   `json:"samplingfreq"`
-	CarrierFreq  float64   `json:"carrierfreq"`
-	RangeOffset  float64   `json:"rangeoffset"`
-	SigI         []float64 `json:"sigi"`
-	SigQ         []float64 `json:"sigq"`
-}
 
 // BaseBandAmpPhase is the struct
 // type BaseBandAmpPhase struct {
@@ -58,66 +40,66 @@ type BaseBandIQ struct {
 // 	Phase        []float64 `json:"phase"`
 // }
 
-const (
-	x2m200AppData    = 0x50
-	x2m200BaseBandIQ = 0x0C
-	x2m200BaseBandAP = 0x0D
-	iqheadersize     = 29
-	apheadersize     = 29
-)
-
-// Example: <x2m200AppData> + [x2m200BaseBandIQ] + [Counter(i)] + [SamplingFrequency(f)]
-// + [CarrierFrequency(f)] + [RangeOffset(f)] + [NumOfBins(i)] + [SigI(f)] + ... + [SigQ(f)] + ... +
-func parseBaseBandIQ(b []byte) (BaseBandIQ, error) {
-	if len(b) < 1 {
-		return BaseBandIQ{}, errParseBaseBandIQNoData
-	}
-	if b[0] != x2m200AppData {
-		return BaseBandIQ{}, errParseBaseBandIQNotBaseBand
-	}
-	if len(b) < iqheadersize {
-		return BaseBandIQ{}, errParseBaseBandIQNotEnoughBytes
-	}
-	x2m200basebandiq := binary.LittleEndian.Uint32(b[1:5])
-	if x2m200basebandiq != x2m200BaseBandIQ {
-		// log.Println(x2m200basebandiq, x2m200BaseBandIQ)
-		return BaseBandIQ{}, errParseBaseBandIQDataHeader
-	}
-
-	var iq BaseBandIQ
-	iq.Time = time.Now().UnixNano()
-	iq.Counter = binary.LittleEndian.Uint32(b[5:9])
-	iq.Bins = binary.LittleEndian.Uint32(b[9:13])
-	iq.BinLength = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[13:17])))
-	iq.SamplingFreq = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[17:21])))
-	iq.CarrierFreq = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[21:25])))
-	iq.RangeOffset = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[25:29])))
-
-	if len(b) < int(iqheadersize+uint32(iq.Bins)) {
-		return iq, errParseBaseBandIQIncompletePacket
-	}
-
-	for i := iqheadersize; i < int((iq.Bins*4)+iqheadersize); i += 4 {
-		sigi := float64(math.Float32frombits(binary.LittleEndian.Uint32(b[i : i+4])))
-		iq.SigI = append(iq.SigI, sigi)
-	}
-
-	for i := int(iqheadersize + 4*iq.Bins); i < int((iq.Bins*8)+iqheadersize); i += 4 {
-		sigq := float64(math.Float32frombits(binary.LittleEndian.Uint32(b[i : i+4])))
-		iq.SigQ = append(iq.SigQ, sigq)
-	}
-
-	return iq, nil
-
-}
-
-var (
-	errParseBaseBandIQNoData           = errors.New("baseband data is zero length")
-	errParseBaseBandIQNotBaseBand      = errors.New("baseband data does not start with x2m200AppData")
-	errParseBaseBandIQNotEnoughBytes   = errors.New("baseband data does contain enough bytes")
-	errParseBaseBandIQDataHeader       = errors.New("baseband data does contain iq baseband header")
-	errParseBaseBandIQIncompletePacket = errors.New("baseband data does contain a full packet of data")
-)
+// const (
+// 	x2m200AppData    = 0x50
+// 	x2m200BaseBandIQ = 0x0C
+// 	x2m200BaseBandAP = 0x0D
+// 	iqheadersize     = 29
+// 	apheadersize     = 29
+// )
+//
+// // Example: <x2m200AppData> + [x2m200BaseBandIQ] + [Counter(i)] + [SamplingFrequency(f)]
+// // + [CarrierFrequency(f)] + [RangeOffset(f)] + [NumOfBins(i)] + [SigI(f)] + ... + [SigQ(f)] + ... +
+// func parseBaseBandIQ(b []byte) (BaseBandIQ, error) {
+// 	if len(b) < 1 {
+// 		return BaseBandIQ{}, errParseBaseBandIQNoData
+// 	}
+// 	if b[0] != x2m200AppData {
+// 		return BaseBandIQ{}, errParseBaseBandIQNotBaseBand
+// 	}
+// 	if len(b) < iqheadersize {
+// 		return BaseBandIQ{}, errParseBaseBandIQNotEnoughBytes
+// 	}
+// 	x2m200basebandiq := binary.LittleEndian.Uint32(b[1:5])
+// 	if x2m200basebandiq != x2m200BaseBandIQ {
+// 		// log.Println(x2m200basebandiq, x2m200BaseBandIQ)
+// 		return BaseBandIQ{}, errParseBaseBandIQDataHeader
+// 	}
+//
+// 	var iq BaseBandIQ
+// 	iq.Time = time.Now().UnixNano()
+// 	iq.Counter = binary.LittleEndian.Uint32(b[5:9])
+// 	iq.Bins = binary.LittleEndian.Uint32(b[9:13])
+// 	iq.BinLength = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[13:17])))
+// 	iq.SamplingFreq = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[17:21])))
+// 	iq.CarrierFreq = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[21:25])))
+// 	iq.RangeOffset = float64(math.Float32frombits(binary.LittleEndian.Uint32(b[25:29])))
+//
+// 	if len(b) < int(iqheadersize+uint32(iq.Bins)) {
+// 		return iq, errParseBaseBandIQIncompletePacket
+// 	}
+//
+// 	for i := iqheadersize; i < int((iq.Bins*4)+iqheadersize); i += 4 {
+// 		sigi := float64(math.Float32frombits(binary.LittleEndian.Uint32(b[i : i+4])))
+// 		iq.SigI = append(iq.SigI, sigi)
+// 	}
+//
+// 	for i := int(iqheadersize + 4*iq.Bins); i < int((iq.Bins*8)+iqheadersize); i += 4 {
+// 		sigq := float64(math.Float32frombits(binary.LittleEndian.Uint32(b[i : i+4])))
+// 		iq.SigQ = append(iq.SigQ, sigq)
+// 	}
+//
+// 	return iq, nil
+//
+// }
+//
+// var (
+// 	errParseBaseBandIQNoData           = errors.New("baseband data is zero length")
+// 	errParseBaseBandIQNotBaseBand      = errors.New("baseband data does not start with x2m200AppData")
+// 	errParseBaseBandIQNotEnoughBytes   = errors.New("baseband data does contain enough bytes")
+// 	errParseBaseBandIQDataHeader       = errors.New("baseband data does contain iq baseband header")
+// 	errParseBaseBandIQIncompletePacket = errors.New("baseband data does contain a full packet of data")
+// )
 
 // Example: <XTS_SPR_APPDATA> + [XTS_ID_BASEBAND_AMPLITUDE_PHASE(i)] + [Counter(i)] + [NumOfBins(i)]
 // + [BinLength(f)] + [SamplingFrequency(f)] + [CarrierFrequency(f)] + [RangeOffset(f)] + [Amplitude(f)]
