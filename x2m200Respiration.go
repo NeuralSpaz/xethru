@@ -25,8 +25,10 @@ type status uint32
 //go:generate jsonenums -type=status
 //go:generate stringer -type=status
 const (
-	respApp  status = 594935334
-	sleepApp status = 594911596
+	respApp    status = 594935334
+	sleepApp   status = 594911596
+	basebandAP status = 0x0d
+	basebandIQ status = 0x0c
 )
 
 // Sleep is the struct
@@ -46,6 +48,7 @@ type respirationState uint32
 
 type BaseBandAmpPhase struct {
 	Time         int64     `json:"time"`
+	Status       status    `json:"status"`
 	Counter      uint32    `json:"counter"`
 	Bins         uint32    `json:"bins"`
 	BinLength    float64   `json:"binlength"`
@@ -58,6 +61,7 @@ type BaseBandAmpPhase struct {
 
 type BaseBandIQ struct {
 	Time         int64     `json:"time"`
+	Status       status    `json:"status"`
 	Counter      uint32    `json:"counter"`
 	Bins         uint32    `json:"bins"`
 	BinLength    float64   `json:"binlength"`

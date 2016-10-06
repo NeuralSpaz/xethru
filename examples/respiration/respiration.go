@@ -102,7 +102,7 @@ func respirationwsHandler(w http.ResponseWriter, r *http.Request) {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			respirationconnectionsMutex.Lock()
-			log.Printf("Disconnecting %v because %v\n", conn, err)
+			// log.Printf("Disconnecting %v because %v\n", conn, err)
 			delete(respirationconnections, conn)
 			respirationconnectionsMutex.Unlock()
 			conn.Close()
@@ -146,7 +146,7 @@ func baseBandwsHandler(w http.ResponseWriter, r *http.Request) {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			baseBandconnectionsMutex.Lock()
-			log.Printf("Disconnecting %v because %v\n", conn, err)
+			// log.Printf("Disconnecting %v because %v\n", conn, err)
 			delete(baseBandconnections, conn)
 			baseBandconnectionsMutex.Unlock()
 			conn.Close()
@@ -199,7 +199,7 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 	port.Flush()
 
 	x2 := xethru.Open("x2m200", port)
-
+	// x2.Rese
 	reset, err := x2.Reset()
 	if err != nil {
 		log.Printf("serial.Reset: %v\n", err)

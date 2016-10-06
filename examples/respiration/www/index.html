@@ -356,7 +356,7 @@ function Respiration(data) {
 	// bars = data.length;
 	bar_x = (respctx.canvas.width/2);
 	bar_y = 5
-	bar_width = -data.Movement*50
+	bar_width = -data.movement*50
 	bar_height = respctx.canvas.height -10
 	respctx.fillRect(bar_x, bar_y, bar_width, bar_height);
 
@@ -366,7 +366,7 @@ function Respiration(data) {
 	respctx.textBaseline = "middle";
 
 	respctx.fillStyle = 'black';
-	text = data.State + " " + data.RPM + " " + distanceFiltered.toFixed(2)+ " " + data.Distance.toFixed(2);
+	text = data.state + " " + data.rpm + " " + distanceFiltered.toFixed(2)+ " " + data.distance.toFixed(2);
 	respctx.fillText(text, respctx.canvas.width/2, respctx.canvas.height/2);
 	// for (var i = 0; i < bars; i++) {
 	// 	bar_x = i * ampcanvas.width/bars;

@@ -100,15 +100,14 @@ func (x *x2m200Frame) Read(b []byte) (n int, err error) {
 			n = copy(b, p)
 			return n, nil
 		}
-	} else {
-		return 0, errPacketNoStartByte
 	}
-	return 0, nil
+	return 0, errPacketNoStartByte
+	// return 0, nil
 }
 
 func validator(b []byte) (bool, []byte, error) {
-	var k []byte
-	k = append(k, b...)
+	// var k []byte
+	// k = append(k, b...)
 
 	const (
 		wait = iota

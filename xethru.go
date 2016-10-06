@@ -30,19 +30,21 @@ import (
 func Open(device string, port io.ReadWriter) Framer {
 	// fmt.Println("New instance of Xethru")
 	// if device == "x2m200" {
-	return &x2m200Frame{
+	x := &x2m200Frame{
 		w: port,
 		r: bufio.NewReader(port),
 	}
+	// TODO: disable all feeds
+	return x
 	// }
 	// return &x2m200Frame{w: port, r: port}
 }
 
-// Framer is a wrapper for a serial protocol. it insets the start, crc and end bytes for you
+// Framer is a wrapper for a serial protocol. it inserts the start, crc and end bytes for you
 type Framer interface {
 	io.Writer
 	io.Reader
-	Ping(t time.Duration) (bool, error)
+	// Ping(t time.Duration) (bool, error)
 	Reset() (bool, error)
 }
 
