@@ -28,17 +28,12 @@ import (
 	"bufio"
 	"errors"
 	"io"
-	"log"
 )
 
 type x2m200Frame struct {
 	w io.Writer
 	r *bufio.Reader
-	// buf          []byte
-	// rpos, wpos   int // buf read and write positions
-	// err          error
-	// lastByte     int
-	// lastRuneSize int
+	// frameBuffer []byte
 }
 
 type protocolError byte
@@ -52,8 +47,8 @@ const (
 func (x *x2m200Frame) Write(p []byte) (n int, err error) {
 
 	p = append(p[:0], append([]byte{startByte}, p[0:]...)...)
-	// cant be error from checksum at we just set the startByte
-	crc, _ := checksum(&p)
+	crc := checksum(&p)
+	// not quite correct but works most of the time but need to ignor endByte that are not at end.
 	for k := 0; k < len(p); k++ {
 		if p[k] == endByte {
 			p = append(p[:k], append([]byte{escByte}, p[k:]...)...)
@@ -62,17 +57,8 @@ func (x *x2m200Frame) Write(p []byte) (n int, err error) {
 	}
 	p = append(p, crc)
 	p = append(p, endByte)
-	n, err = x.w.Write(p)
-
-	// fmt.Printf("DEBUG Write: ")
-	// for i := 0; i < n; i++ {
-	// 	fmt.Printf("%#02x", p[i])
-	// }
-	// fmt.Printf("\n")
-	return
+	return x.w.Write(p)
 }
-
-// const headerSize int = 2
 
 // Flow Control bytes
 // startByte + [data] + CRC + endByte
@@ -84,95 +70,43 @@ const (
 )
 
 func (x *x2m200Frame) Read(b []byte) (n int, err error) {
-	// read from the reader
-	// var n int
-	// var p byte
 	var s []byte
-	// var n int
 	header, err := x.r.Peek(1)
+	if err != nil {
+		return 0, io.EOF
+	}
 	if header[0] == startByte {
-		// log.Printf("\n\n\n\nWe Got a startByte")
 		s, err = x.r.ReadBytes(endByte)
-
-		// fmt.Printf("DEBUG Read: ")
-		// for i := 0; i < len(s); i++ {
-		// 	fmt.Printf("%#02x ", s[i])
-		// }
-		// fmt.Printf("\n")
-
 		if err != nil {
-			log.Println("DEBUG READ BYTE ERROR ", err)
-			// n = copy(b, s)
 			return 0, err
 		}
-
-		ok, _, p := validator(s)
-		// log.Printf("validator ok=%v err=%v\n", ok, err)
+		ok, p, verr := validator(s)
+		// log.Println(verr)
+		if ok && verr != nil {
+			// log.Println(verr)
+			return 0, verr
+		}
 
 		for !ok {
 			// scan to next endByte
 			s2, err := x.r.ReadBytes(endByte)
-			if err != nil {
-				log.Println("DEBUG READ BYTE ERROR ", err)
-				return 0, err
+			if err != nil && verr != errPacketNotLongEnough {
+				return 0, verr
 			}
-			// fmt.Printf("DEBUG Read S2: ")
-			// for i := 0; i < len(s2); i++ {
-			// 	fmt.Printf("%#02x ", s2[i])
-			// }
-			// fmt.Printf("\n")
-			//
-			// fmt.Printf("DEBUG Read Before Append: ")
-			// for i := 0; i < len(s); i++ {
-			// 	fmt.Printf("%#02x ", s[i])
-			// }
-			// fmt.Printf("\n")
-
 			s = append(s, s2...)
-
-			// fmt.Printf("DEBUG Read After Append:  ")
-			// for i := 0; i < len(s); i++ {
-			// 	fmt.Printf("%#02x ", s[i])
-			// }
-			// fmt.Printf("\n")
-			ok, _, p = validator(s)
-			// log.Printf("validator take 2 ok=%v err=%v\n", ok, err)
+			ok, p, _ = validator(s)
 		}
 		if ok {
 			n = copy(b, p)
 			return n, nil
 		}
-		// if err != nil {
-		// 	log.Println("DEBUG validator ERROR ", err)
-		// }
-		// for !ok {
-		// 	b = append(b, s...)
-		// 	s2, err := x.r.ReadBytes(endByte)
-		// 	if err != nil {
-		// 		log.Println("DEBUG READ BYTE ERROR ", err)
-		// 	}
-		// 	b = append(b, s...)
-		// 	ok, err = validator(b)
-		// 	if err != nil {
-		// 		log.Println("DEBUG validator ERROR ", err)
-		// 	}
-		// }
-		// if ok {
-		// 	n = copy(b, s)
-		// 	return n, nil
-		// }
-
 	} else {
 		return 0, errPacketNoStartByte
 	}
 	return 0, nil
-	// for {
-	// 	n, err = x.r.ReadBytes(endByte)
-	// }
-
 }
 
-func validator(b []byte) (bool, error, []byte) {
+func validator(b []byte) (bool, []byte, error) {
 	var k []byte
 	k = append(k, b...)
 
@@ -191,14 +125,8 @@ func validator(b []byte) (bool, error, []byte) {
 			if v == startByte {
 				state = inMessage
 				buf = append(buf, v)
-				// fmt.Printf("DEBUG validator startByte:              ")
-				// for i := 0; i < len(buf); i++ {
-				// 	fmt.Printf("%#02x ", buf[i])
-				// }
-				// fmt.Printf("\n")
 			}
 		case inMessage:
-			// fmt.Printf("k = %d, len = %d\n", k, len(b))
 			if k == len(b)-1 {
 				state = done
 			} else if v == escByte {
@@ -206,141 +134,52 @@ func validator(b []byte) (bool, error, []byte) {
 			} else {
 				state = inMessage
 				buf = append(buf, v)
-				// fmt.Printf("DEBUG validator inMessage:              ")
-				// for i := 0; i < len(buf); i++ {
-				// 	fmt.Printf("%#02x ", buf[i])
-				// }
-				// fmt.Printf("\n")
 			}
 		case afterEsc:
 			if v == endByte && k == len(b)-1 {
-				// fmt.Printf("DEBUG errPacketNotLongEnough:               ")
-				// for i := 0; i < len(buf); i++ {
-				// 	fmt.Printf("%#02x ", buf[i])
-				// }
-				// fmt.Printf("\n")
-				return false, errPacketNotLongEnough, nil
+				return false, nil, errPacketNotLongEnough
 			}
 			state = inMessage
 			buf = append(buf, v)
-			// fmt.Printf("DEBUG validator afterEsc:               ")
-			// for i := 0; i < len(buf); i++ {
-			// 	fmt.Printf("%#02x ", buf[i])
-			// }
-			// fmt.Printf("\n")
 		}
 	}
-
-	// fmt.Printf("DEBUG before crc:                       ")
-	// for i := 0; i < len(buf); i++ {
-	// 	fmt.Printf("%#02x ", buf[i])
-	// }
-	// fmt.Printf("\n")
-
 	var crcByte byte
-
 	n := len(buf)
-
 	crcByte, buf = buf[n-1], buf[:n-1]
 	n--
 
-	crc, crcerr := checksum(&buf)
-	// log.Printf("CRC %#02x, CRCBYTE %#02x", crc, crcByte)
-	if crcerr != nil {
-		return false, errPacketNoStartByte, nil
-	}
+	crc := checksum(&buf)
 
 	if crcByte != crc {
-		return false, errPacketBadCRC, nil
+		return false, nil, errPacketBadCRC
 	}
 
 	buf = buf[:0+copy(buf[0:], buf[1:])]
 	n--
 
-	// fmt.Printf("DEBUG validator:              ")
-	// for i := 0; i < len(buf); i++ {
-	// 	fmt.Printf("%#02x ", buf[i])
-	// }
-	// fmt.Printf("\n")
-
-	return true, nil, buf
-
-	// fmt.Printf("DEBUG validator:              ")
-	// for i := 0; i < len(k); i++ {
-	// 	fmt.Printf("%#02x ", k[i])
-	// }
-	// fmt.Printf("\n")
-	//
-	// n := len(k)
-	// // var last kyte
-	// // pop endByte
-	// _, k = k[n-1], k[:n-1]
-	// n--
-	//
-	// fmt.Printf("DEBUG validator pop endbyte:  ")
-	// for i := 0; i < len(k); i++ {
-	// 	fmt.Printf("%#02x ", k[i])
-	// }
-	// fmt.Printf("\n")
-	//
-	// // pop crcByte to check later
-	// var crcByte byte
-	// crcByte, k = k[n-1], k[:n-1]
-	// n--
-	//
-	// fmt.Printf("DEBUG validator pop crcbyte:  ")
-	// for i := 0; i < len(k); i++ {
-	// 	fmt.Printf("%#02x ", k[i])
-	// }
-	// fmt.Printf("\n")
-	//
-	// // delete escBytes
-	// for i := 0; i < (n - 1); i++ {
-	// 	if k[i] == escByte && k[i+1] == endByte {
-	// 		k = k[:i+copy(k[i:], k[i+1:])]
-	// 		n--
-	// 	}
-	// }
-	//
-	// fmt.Printf("DEBUG validator del escbytes: ")
-	// for i := 0; i < len(k); i++ {
-	// 	fmt.Printf("%#02x ", k[i])
-	// }
-	// fmt.Printf("\n")
-	//
-	// // check crcbyte
-	// crc, crcerr := checksum(&k)
-	// if crcerr != nil {
-	// 	return false, errPacketNoStartByte, nil
-	// }
-	// log.Printf("DEBUG validator CRC, crc %#02x, crcbyte %#02x ", crc, crcByte)
-	// if crcByte != crc {
-	// 	return false, errPacketBadCRC, nil
-	// }
-	// // delete startByte
-	// k = k[:0+copy(k[0:], k[1:])]
-	// n--
-	// // check for errors byte
-	// if k[0] == errorByte {
-	// 	switch protocolError(k[1]) {
-	// 	case notReconsied:
-	// 		return false, errProtocolErrorNotReconsied, nil
-	// 	case crcFailed:
-	// 		return false, errProtocolErrorCRCfailed, nil
-	// 	case invaidAppID:
-	// 		return false, errProtocolErrorInvaidAppID, nil
-	// 	}
-	// }
-	//
-
+	if n > 1 {
+		if buf[0] == errorByte {
+			pError := protocolError(buf[1])
+			switch pError {
+			case notReconsied:
+				return true, buf, errProtocolErrorNotReconsied
+			case crcFailed:
+				return true, buf, errProtocolErrorCRCfailed
+			case invaidAppID:
+				return true, buf, errProtocolErrorInvaidAppID
+			}
+		}
+	}
+	// log.Println("returning nil")
+	// log.Printf("%#0x\n", buf)
+	return true, buf, nil
 }
 
 var (
 	errPacketNotLongEnough       = errors.New("not long enough")
 	errPacketNoStartByte         = errors.New("no startbyte")
-	errPacketNotEndbyte          = errors.New("does not end with endbyte")
 	errPacketBadCRC              = errors.New("failed checksum")
-	errProtocolErrorNotReconsied = errors.New("protocol error command not reconsied")
+	errProtocolErrorNotReconsied = errors.New("protocol error command not recognised")
 	errProtocolErrorCRCfailed    = errors.New("protocol error command bad crc")
 	errProtocolErrorInvaidAppID  = errors.New("protocol error invalid app id")
 )
@@ -348,17 +187,12 @@ var (
 // Calculated by XOR’ing all bytes from <START> + [Data].
 // Note that the CRC is done after escape bytes is removed. This
 // means that CRC is also calculated before adding escape bytes.
-func checksum(p *[]byte) (byte, error) {
-	// fmt.Printf("byte to check sum %x\n", p)
-	if (*p)[0] != startByte {
-		return 0x00, errChecksumInvalidPacketSTART
-	}
+func checksum(p *[]byte) byte {
 	var crc byte
 	for _, b := range *p {
 		crc = crc ^ b
 	}
-
-	return crc, nil
+	return crc
 }
 
 var errChecksumInvalidPacketSTART = errors.New("invalid packet missing start")
