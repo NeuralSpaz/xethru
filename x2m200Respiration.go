@@ -26,7 +26,7 @@ type status uint32
 //go:generate stringer -type=status
 const (
 	respApp  status = 594935334
-	sleepAPP status = 594911596
+	sleepApp status = 594911596
 )
 
 // Sleep is the struct

@@ -5,7 +5,7 @@ package xethru
 import "fmt"
 
 const (
-	_status_name_0 = "sleepAPP"
+	_status_name_0 = "sleepApp"
 	_status_name_1 = "respApp"
 )
 
