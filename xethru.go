@@ -17,6 +17,9 @@
 
 // Xethru-GO a driver for the xethru sensor modules
 
+// Package xethru: An open source implementation driver for xethru sensor modules.
+// The current state of the api is still unstable and under active development.
+// Contributions are welcome.
 package xethru
 
 import (
@@ -36,15 +39,12 @@ func Open(device string, port io.ReadWriter) Framer {
 	}
 	// TODO: disable all feeds
 	return x
-	// }
-	// return &x2m200Frame{w: port, r: port}
 }
 
 // Framer is a wrapper for a serial protocol. it inserts the start, crc and end bytes for you
 type Framer interface {
 	io.Writer
 	io.Reader
-	// Ping(t time.Duration) (bool, error)
 	Reset() (bool, error)
 }
 

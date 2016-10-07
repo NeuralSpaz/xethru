@@ -20,6 +20,47 @@ type Respiration struct {
 	Movement      float64          `json:"movement"`
 }
 
+// Sleep is the struct
+type Sleep struct {
+	Time          int64            `json:"time"`
+	Status        status           `json:"type"`
+	Counter       uint32           `json:"counter"`
+	State         respirationState `json:"state"`
+	RPM           float64          `json:"rpm"`
+	Distance      float64          `json:"distance"`
+	SignalQuality float64          `json:"signalquality"`
+	MovementSlow  float64          `json:"movementslow"`
+	MovementFast  float64          `json:"movementfast"`
+}
+
+// BaseBandAmpPhase is the struct
+type BaseBandAmpPhase struct {
+	Time         int64     `json:"time"`
+	Status       status    `json:"type"`
+	Counter      uint32    `json:"counter"`
+	Bins         uint32    `json:"bins"`
+	BinLength    float64   `json:"binlength"`
+	SamplingFreq float64   `json:"samplingfreq"`
+	CarrierFreq  float64   `json:"carrier"`
+	RangeOffset  float64   `json:"offset"`
+	Amplitude    []float64 `json:"amplitude"`
+	Phase        []float64 `json:"phase"`
+}
+
+// BaseBandIQ is the struct
+type BaseBandIQ struct {
+	Time         int64     `json:"time"`
+	Status       status    `json:"type"`
+	Counter      uint32    `json:"counter"`
+	Bins         uint32    `json:"bins"`
+	BinLength    float64   `json:"binlength"`
+	SamplingFreq float64   `json:"samplingfreq"`
+	CarrierFreq  float64   `json:"carrier"`
+	RangeOffset  float64   `json:"offset"`
+	SigI         []float64 `json:"i"`
+	SigQ         []float64 `json:"q"`
+}
+
 type status uint32
 
 //go:generate jsonenums -type=status
@@ -31,46 +72,7 @@ const (
 	basebandIQ status = 0x0c
 )
 
-// Sleep is the struct
-type Sleep struct {
-	Time          int64            `json:"time"`
-	Status        status           `json:"status"`
-	Counter       uint32           `json:"counter"`
-	State         respirationState `json:"state"`
-	RPM           float64          `json:"rpm"`
-	Distance      float64          `json:"distance"`
-	SignalQuality float64          `json:"signalquality"`
-	MovementSlow  float64          `json:"movementslow"`
-	MovementFast  float64          `json:"movementfast"`
-}
-
 type respirationState uint32
-
-type BaseBandAmpPhase struct {
-	Time         int64     `json:"time"`
-	Status       status    `json:"status"`
-	Counter      uint32    `json:"counter"`
-	Bins         uint32    `json:"bins"`
-	BinLength    float64   `json:"binlength"`
-	SamplingFreq float64   `json:"samplingfreq"`
-	CarrierFreq  float64   `json:"carrier"`
-	RangeOffset  float64   `json:"offset"`
-	Amplitude    []float64 `json:"amplitude"`
-	Phase        []float64 `json:"phase"`
-}
-
-type BaseBandIQ struct {
-	Time         int64     `json:"time"`
-	Status       status    `json:"status"`
-	Counter      uint32    `json:"counter"`
-	Bins         uint32    `json:"bins"`
-	BinLength    float64   `json:"binlength"`
-	SamplingFreq float64   `json:"samplingfreq"`
-	CarrierFreq  float64   `json:"carrier"`
-	RangeOffset  float64   `json:"offset"`
-	SigI         []float64 `json:"i"`
-	SigQ         []float64 `json:"q"`
-}
 
 //go:generate jsonenums -type=respirationState
 //go:generate stringer -type=respirationState
@@ -82,7 +84,7 @@ const (
 	initializing   respirationState = 4
 	stateReserved  respirationState = 5
 	stateUnknown   respirationState = 6
-	SomeotherState respirationState = 7
+	someotherState respirationState = 7
 )
 
 // NewModule creates
@@ -120,6 +122,8 @@ func NewModule(f Framer, mode string) *Module {
 
 type ledMode byte
 
+// XM200 LED Modes
+//
 //go:generate jsonenums -type=ledMode
 //go:generate stringer -type=ledMode
 const (
@@ -153,8 +157,10 @@ func (r *Module) SetLEDMode() {
 	}
 }
 
-const x2m200AppCommand = 0x10
-const x2m200Set = 0x10
+const (
+	x2m200AppCommand = 0x10
+	x2m200Set        = 0x10
+)
 
 var x2m200DetectionZone = [4]byte{0x96, 0xa1, 0x0a, 0x1c}
 

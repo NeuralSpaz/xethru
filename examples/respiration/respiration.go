@@ -200,21 +200,8 @@ func sendBaseBand(msg []byte) {
 }
 
 func openXethru(comm string, baudrate uint, baseband chan xethru.BaseBandAmpPhase, resp chan xethru.Respiration) {
-	// online, err := exists(comm)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// for !online {
-	// 	time.Sleep(time.Millisecond * 2000)
-	// 	online, err = exists(comm)
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// }
-	time.Sleep(time.Millisecond * 2000)
 
-	// c := &serial.Config{Name: comm, Baud: baudrate}
-	// port, err := serial.OpenPort(c)
+	time.Sleep(time.Millisecond * 2000)
 
 	options := serial.OpenOptions{
 		PortName:        comm,
@@ -228,10 +215,9 @@ func openXethru(comm string, baudrate uint, baseband chan xethru.BaseBandAmpPhas
 	if err != nil {
 		log.Printf("serial.Open: %v\n", err)
 	}
-	// port.Flush()
 
 	x2 := xethru.Open("x2m200", port)
-	// x2.Rese
+
 	reset, err := x2.Reset()
 	if err != nil {
 		log.Printf("serial.Reset: %v\n", err)
@@ -240,34 +226,13 @@ func openXethru(comm string, baudrate uint, baseband chan xethru.BaseBandAmpPhas
 	port.Close()
 	time.Sleep(time.Millisecond * 5000)
 
-	// online, err = exists(comm)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// for !online {
-	// 	time.Sleep(time.Millisecond * 2000)
-	// 	online, err = exists(comm)
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// }
-	// time.Sleep(time.Millisecond * 5000)
 	time.Sleep(time.Millisecond * 10000)
-
-	// options := serial.OpenOptions{
-	// 	PortName:        comm,
-	// 	BaudRate:        baudrate,
-	// 	DataBits:        8,
-	// 	StopBits:        1,
-	// 	MinimumReadSize: 4,
-	// }
 
 	port, err = serial.Open(options)
 	if err != nil {
 		log.Fatalf("serial.Open: %v", err)
 	}
 	time.Sleep(time.Second * 1)
-	// port.Flush()
 
 	defer port.Close()
 	x2 = xethru.Open("x2m200", port)
@@ -283,28 +248,19 @@ func openXethru(comm string, baudrate uint, baseband chan xethru.BaseBandAmpPhas
 	log.Println("Setting LED MODE")
 	m.LEDMode = xethru.LEDInhalation
 	m.SetLEDMode()
-	// time.Sleep(time.Second * 1)
 
 	log.Println("SetDetectionZone")
 	m.SetDetectionZone(0.5, 2.1)
-	// time.Sleep(time.Second * 10)
 
 	log.Println("SetSensitivity")
 	m.SetSensitivity(7)
-	// time.Sleep(time.Second * 1)
 	m.Enable("phase")
-	// time.Sleep(time.Second * 5)
 	stream := make(chan interface{})
 	go m.Run(stream)
 
 	// open default browser
 	open("http://localhost:23000/")
 
-	// basebandfile, err := os.Create("./basebanddata.json")
-	// if err != nil {
-	// 	log.Panic(err)
-	// }
-	// defer basebandfile.Close()
 	respirationfile, err := os.Create("./respiration.json")
 	if err != nil {
 		log.Panic(err)
@@ -317,35 +273,21 @@ func openXethru(comm string, baudrate uint, baseband chan xethru.BaseBandAmpPhas
 	}
 	defer sleepfile.Close()
 
-	// basebandenc := json.NewEncoder(basebandfile)
 	sleepenc := json.NewEncoder(sleepfile)
 	respirationenc := json.NewEncoder(respirationfile)
-	// respirationscreenenc := json.NewEncoder(os.Stdout)
-
-	// frameCounter := 0
 	for {
 		select {
 		case s := <-stream:
 			switch s.(type) {
 			case xethru.Respiration:
 				resp <- s.(xethru.Respiration)
-				// if err := respirationscreenenc.Encode(&s); err != nil {
-				// 	log.Println(err)
-				// }
 				if err := respirationenc.Encode(&s); err != nil {
 					log.Println(err)
 				}
 			case xethru.BaseBandAmpPhase:
 				baseband <- s.(xethru.BaseBandAmpPhase)
-				// if err := basebandenc.Encode(&s); err != nil {
-				// 	log.Println(err)
-				// }
 			case xethru.Sleep:
 				s = s.(xethru.Sleep)
-				// sleep <- s.(xethru.Sleep)
-				// if err := respirationscreenenc.Encode(&s); err != nil {
-				// 	log.Println(err)
-				// }
 				if err := sleepenc.Encode(&s); err != nil {
 					log.Println(err)
 				}
@@ -354,20 +296,5 @@ func openXethru(comm string, baudrate uint, baseband chan xethru.BaseBandAmpPhas
 			}
 
 		}
-		// if frameCounter%100 == 0 {
-		// basebandfile.Sync()
-		// respirationfile.Sync()
-		// }
 	}
 }
-
-// func exists(path string) (bool, error) {
-// 	_, err := os.Stat(path)
-// 	if err == nil {
-// 		return true, nil
-// 	}
-// 	if os.IsNotExist(err) {
-// 		return false, nil
-// 	}
-// 	return true, err
-// }
