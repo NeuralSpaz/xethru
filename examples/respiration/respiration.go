@@ -24,26 +24,28 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/NeuralSpaz/xethru"
 	"github.com/gorilla/websocket"
-	// "github.com/jacobsa/go-serial/serial"
-	"github.com/tarm/serial"
+	"github.com/jacobsa/go-serial/serial"
+	// "github.com/tarm/serial"
 )
 
 func main() {
 	log.Println("X2M200 Respiration Demo")
 
 	commPort := flag.String("commPort", "/dev/ttyACM0", "the comm port you wish to use")
-	baudrate := flag.Int("baudrate", 921600, "the baud rate for the comm port you wish to use")
+	baudrate := flag.Uint("baudrate", 115200, "the baud rate for the comm port you wish to use")
 	// pingTimeout := flag.Duration("pingTimeout", time.Millisecond*500, "timeout for ping command")
 	flag.Parse()
 
 	baseband := make(chan xethru.BaseBandAmpPhase)
 	resp := make(chan xethru.Respiration)
-
+	// time.Sleep(time.Second * 5)
 	go openXethru(*commPort, *baudrate, baseband, resp)
 	baseBandconnections = make(map[*websocket.Conn]bool)
 	respirationconnections = make(map[*websocket.Conn]bool)
@@ -51,7 +53,9 @@ func main() {
 	http.HandleFunc("/ws/r", respirationwsHandler)
 
 	// http.HandleFunc("/", indexHandler)
-	http.Handle("/", http.FileServer(http.Dir("./www")))
+	// http.Handle("/", http.FileServer(http.Dir("./www")))
+	http.HandleFunc("/", indexHandler)
+	http.HandleFunc("/js/reconnecting-websocket.min.js", websocketReconnectHandler)
 
 	go func() {
 		err := http.ListenAndServe("0.0.0.0:23000", nil)
@@ -77,6 +81,34 @@ func main() {
 		}
 	}
 
+}
+
+func open(url string) error {
+	var cmd string
+	var args []string
+
+	switch runtime.GOOS {
+	case "windows":
+		cmd = "cmd"
+		args = []string{"/c", "start"}
+	case "darwin":
+		cmd = "open"
+	default: // "linux", "freebsd", "openbsd", "netbsd"
+		cmd = "xdg-open"
+	}
+	args = append(args, url)
+	return exec.Command(cmd, args...).Start()
+}
+
+func indexHandler(w http.ResponseWriter, r *http.Request) {
+	file, _ := Asset("www/index.html")
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(file)
+}
+func websocketReconnectHandler(w http.ResponseWriter, r *http.Request) {
+	file, _ := Asset("www/js/reconnecting-websocket.min.js")
+	w.Header().Set("Content-Type", "text/javascript")
+	w.Write(file)
 }
 
 var respirationconnectionsMutex sync.Mutex
@@ -167,36 +199,36 @@ func sendBaseBand(msg []byte) {
 	baseBandconnectionsMutex.Unlock()
 }
 
-func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase, resp chan xethru.Respiration) {
-	online, err := exists(comm)
-	if err != nil {
-		log.Fatal(err)
-	}
-	for !online {
-		time.Sleep(time.Millisecond * 2000)
-		online, err = exists(comm)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
+func openXethru(comm string, baudrate uint, baseband chan xethru.BaseBandAmpPhase, resp chan xethru.Respiration) {
+	// online, err := exists(comm)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// for !online {
+	// 	time.Sleep(time.Millisecond * 2000)
+	// 	online, err = exists(comm)
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	// }
 	time.Sleep(time.Millisecond * 2000)
 
-	c := &serial.Config{Name: comm, Baud: baudrate}
-	port, err := serial.OpenPort(c)
+	// c := &serial.Config{Name: comm, Baud: baudrate}
+	// port, err := serial.OpenPort(c)
 
-	// options := serial.OpenOptions{
-	// 	PortName:        comm,
-	// 	BaudRate:        baudrate,
-	// 	DataBits:        8,
-	// 	StopBits:        1,
-	// 	MinimumReadSize: 4,
-	// }
-	//
-	// port, err := serial.Open(options)
+	options := serial.OpenOptions{
+		PortName:        comm,
+		BaudRate:        baudrate,
+		DataBits:        8,
+		StopBits:        1,
+		MinimumReadSize: 4,
+	}
+
+	port, err := serial.Open(options)
 	if err != nil {
 		log.Printf("serial.Open: %v\n", err)
 	}
-	port.Flush()
+	// port.Flush()
 
 	x2 := xethru.Open("x2m200", port)
 	// x2.Rese
@@ -208,22 +240,29 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 	port.Close()
 	time.Sleep(time.Millisecond * 5000)
 
-	online, err = exists(comm)
-	if err != nil {
-		log.Fatal(err)
-	}
-	for !online {
-		time.Sleep(time.Millisecond * 2000)
-		online, err = exists(comm)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
+	// online, err = exists(comm)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// for !online {
+	// 	time.Sleep(time.Millisecond * 2000)
+	// 	online, err = exists(comm)
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	// }
 	// time.Sleep(time.Millisecond * 5000)
 	time.Sleep(time.Millisecond * 10000)
 
-	// port, err = serial.Open(options)
-	port, err = serial.OpenPort(c)
+	// options := serial.OpenOptions{
+	// 	PortName:        comm,
+	// 	BaudRate:        baudrate,
+	// 	DataBits:        8,
+	// 	StopBits:        1,
+	// 	MinimumReadSize: 4,
+	// }
+
+	port, err = serial.Open(options)
 	if err != nil {
 		log.Fatalf("serial.Open: %v", err)
 	}
@@ -257,6 +296,9 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 	// time.Sleep(time.Second * 5)
 	stream := make(chan interface{})
 	go m.Run(stream)
+
+	// open default browser
+	open("http://localhost:23000/")
 
 	// basebandfile, err := os.Create("./basebanddata.json")
 	// if err != nil {
@@ -319,13 +361,13 @@ func openXethru(comm string, baudrate int, baseband chan xethru.BaseBandAmpPhase
 	}
 }
 
-func exists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return true, err
-}
+// func exists(path string) (bool, error) {
+// 	_, err := os.Stat(path)
+// 	if err == nil {
+// 		return true, nil
+// 	}
+// 	if os.IsNotExist(err) {
+// 		return false, nil
+// 	}
+// 	return true, err
+// }

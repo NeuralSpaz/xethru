@@ -2,323 +2,81 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<link rel="stylesheet" href="/css/bootstrap.min.css">
     <script src="/js/reconnecting-websocket.min.js"></script>
-	<script src="/js/angular.min.js"></script>
 	<title>Xethru</title>
 
 </head>
 <body ng-app="xethru" >
-<div ng-controller="respCtrl" class="container col-md-12">
+<div>
 	  <canvas id="resp_render"></canvas>
-</div>
-<div ng-controller="basebandCtrl" class="container col-md-12">
 	  <canvas id="amplitude_render"></canvas>
 	  <canvas id="phase_render"></canvas>
-	  <canvas id="amplitude_renderClutterMap"></canvas>
-	  <canvas id="polar_render"></canvas>
 </div>
 
 
 
 <script>
-	function PolarPlot(config) {
-		this.canvas = document.getElementById(config.canvasId);
 
-		this.minX = config.minX;
-		this.minY = config.minY;
-		this.maxX = config.maxX;
-		this.maxY = config.maxY;
-		this.unitsPerTick = config.unitsPerTick;
-
-		this.axisColor = '#aaa';
-		this.font = '8pt Calibri';
-		this.tickSize = 20;
-
-		if (window.innerWidth > window.innerHeight) {
-			console.log("inner biger than window")
-			this.canvas.width = window.innerHeight;
-			this.canvas.height = window.innerHeight;
-			this.canvas.width = document.body.clientHeight;
-			this.canvas.height = document.body.clientHeight;
-		} else {
-			console.log("not biger than window")
-			this.canvas.width = window.innerWidth;
-			this.canvas.height = window.innerWidth;
-			this.canvas.width = document.body.clientWidth;
-			this.canvas.height = document.body.clientWidth/(6/4);
-		}
-
-		this.context = this.canvas.getContext('2d');
-		this.rangeX = this.maxX - this.minX;
-		this.rangeY = this.maxY - this.minY;
-		this.unitX = this.canvas.width / this.rangeX;
-		this.unitY = this.canvas.height / this.rangeY;
-		this.centerY = Math.round(Math.abs(this.minY / this.rangeY) * this.canvas.height);
-		this.centerX = Math.round(Math.abs(this.minX / this.rangeX) * this.canvas.width);
-		this.iteration = (this.maxX - this.minX) / 1000;
-		this.scaleX = this.canvas.width / this.rangeX;
-		this.scaleY = this.canvas.height / this.rangeY;
-		if (this.scaleX >=  this.scaleY) {
-			this.minScale = this.scaleY
-		} else {
-			this.minScale = this.scaleX
-		}
-
-		// this.drawXAxis();
-		// this.drawYAxis();
-		// this.drawCircularAxis();
-	}
-
-	PolarPlot.prototype.drawPhaseAmp = function(phase,amp) {
-		var context = this.context;
-		var canvas = this.canvas;
-		context.globalAlpha = 0.7
-		context.clearRect(0, 0, canvas.width, canvas.height);
-		// satSize = (snr/10)*this.minScale
-		// console.log(phase)
-		font = 4 + "pt Arial"
-		context.font = font;
-		context.fillStyle = 'white';
-		context.textAlign = "center";
-		context.textBaseline = "middle";
-		var points = phase.length;
-		for (var i = 0; i < points; i++) {
-			// amp[i]*= 200
-			// polarphase = (phase[i]*(10/9)*-1) +100
-			// polaramp = (amp[i] +270)/180 * Math.PI
-			var xpos = (amp[i] * Math.cos(phase[i])* this.minScale)+ this.centerX
-			var ypos = (amp[i] * Math.sin(phase[i])* this.minScale)+ this.centerY
-			context.beginPath();
-			context.arc(xpos,ypos,5,0,2*Math.PI);
-			context.fillStyle = gradient[i];
-			context.fill();
-			context.fillStyle = 'white';
-			text = ((i*.04)+.4);
-			context.fillText(text.toFixed(2), xpos, ypos);
-		}
-	};
-
-	var ampcanvas, ampctx, phasecanvas, phasectx, source, context, analyser, fbc_array, bars, bar_x, bar_width, bar_height, respctx, respcanvas, mapctx, mapcanvas;
+	var ampcanvas, ampctx, phasecanvas, phasectx, bars, bar_x, bar_width, bar_height, respctx, respcanvas ;
 	ampcanvas = document.getElementById('amplitude_render');
-	// ampcanvas.width = 800
 	ampctx = ampcanvas.getContext('2d');
-
 	phasecanvas = document.getElementById('phase_render');
 	phasectx = phasecanvas.getContext('2d');
-
-	mapcanvas = document.getElementById('amplitude_renderClutterMap');
-	mapctx = mapcanvas.getContext('2d');
-
 	respcanvas = document.getElementById('resp_render');
 	respctx = respcanvas.getContext('2d');
 	var gradient = ["#0011FF", "#0F10F0", "#1E0FE1", "#2D0ED2", "#3C0DC3", "#4B0BB3", "#5A0AA4", "#690A96", "#780987", "#870878", "#960769", "#A50559", "#B4044A", "#C3043C", "#D2032D", "#E1021E", "#F0010F", "#FF0000", "#F00F05", "#E11E0A", "#D22D0F", "#C33C14", "#B34B19", "#A45A1E", "#966923", "#877828", "#78872D", "#699632", "#59A537", "#4AB43C", "#3CC341", "#2DD246", "#1EE14B", "#0FF050", "#00FF55", "#0FFD50", "#1EFB4B", "#2DF946", "#3CF741", "#4BF63B", "#5AF436", "#69F232", "#78F02D", "#87EF28", "#96ED23", "#A5EB1D", "#B4E918", "#C3E814", "#D2E60F", "#E1E40A", "#F0E205", "#FFE100"]
 
-	var distance = 0
 
-	var NormaliseArray = [];
-	function Normalise() {
-		var offset = 0.4
-		var framesize = 0.04
-		for (var i =0 ; i<52; i++){
-			NormaliseArray[i]= (offset^4) + 4*framesize*i*(offset^3) - 6*(offset^2)*(framesize^2) - 4*i*offset*(framesize^3) + (framesize^4);
-			console.log(i, NormaliseArray[i])
-		}
-	}
-
-	var ClutterMap = [];
-
-	for (var i =0 ; i<52; i++){
-		// console.log(amplitude[i])
-		ClutterMap[i]= 0
-	}
-
-	function UpdateClutterMap(amplitude, weight) {
-		for (var i =0 ; i<52; i++){
-			// console.log(amplitude[i])
-			ClutterMap[i]= ClutterMap[i]*(1-weight) + (amplitude[i]*weight)
-		}
-	}
-
-	var distanceFiltered = 0;
-	// var DistanceNotFiltered;
-	function UpdateDistance(d, weight) {
-		// for (var i =0 ; i<52; i++){
-			// console.log(amplitude[i])
-			// ClutterMap[i]= ClutterMap[i]*(1-weight) + (amplitude[i]*weight)
-		// }
-		distanceFiltered = distanceFiltered*(1-weight) + d*weight;
-		// return distanceFiltered
-	}
-
-
-var app = angular.module("xethru", []);
-
-app.controller("basebandCtrl", ["$scope", function($scope) {
-
-	$scope.array = [];
-	// var cluttermap = [];
-
-  	var loc = window.location,
+  	var bbloc = window.location,
   	    bbwebsocket_uri;
-  	if (loc.protocol === "https:") {
+  	if (bbloc.protocol === "https:") {
   	    bbwebsocket_uri = "wss:";
   	} else {
   	    bbwebsocket_uri = "ws:";
   	}
-  	bbwebsocket_uri += "//" + loc.host + "/ws/bb";
-
-	var polar = new PolarPlot({
-		canvasId: 'polar_render',
-		minX: -100,
-		minY: -100,
-		maxX: 100,
-		maxY: 100,
-	});
-
-  	// conn = new WebSocket(websocket_uri);
+  	bbwebsocket_uri += "//" + bbloc.host + "/ws/bb";
     var bbconn = new ReconnectingWebSocket(bbwebsocket_uri);
 
-  	$scope.wsStatus = false;
+  	bbconn.onclose = function(e) {};
 
-  	console.log("Websocket URI: " + bbwebsocket_uri)
-
-  	bbconn.onclose = function(e) {
-  	  $scope.$apply(function() {
-        console.log("Websocket Closed")
-  	    $scope.wsStatus = false;
-  	  });
-  	};
-
-    bbconn.onopen = function(e) {
-        $scope.$apply(function() {
-            console.log("Websocket Open")
-            $scope.wsStatus = true;
-        })
-    };
-	Normalise()
+    bbconn.onopen = function(e) {};
     var WebsocketMessageCount = 0
 
     bbconn.onmessage = function(e) {
-		// console.log(e)
-    	// WebsocketMessageCount++
       var data = JSON.parse(e.data);
-	//   console.log(data)
-      if ($scope.array.length > 20) {
-      	$scope.array.splice(0,1)
-      }
-      // console.log(wsData);
-      $scope.$apply(function() {
-      	// console.log(data);
-        $scope.array.push(data)
-		// draw(data.amplitude)
-		// console.log(data.amplitude)
-		// ctx.clearRect(0, 0, canvas.width, canvas.height);
-		var amplitude =[];
-		for (var i = 0; i < data.bins; i++) {
-			amplitude[i]= -data.amplitude[i]*NormaliseArray[i]
-		}
-		// console.log(amplitude)
-		// for (var i = 0; i < data.bins; i++) {
-		// 	amplitude[i]= Math.log2(amplitude[i])
-		// }
-		// console.log(amplitude)
-
-		UpdateClutterMap(amplitude, 0.05)
-		renderClutterMap(ClutterMap)
-		// console.log(ClutterMap)
-		for (var i = 0; i < data.bins; i++) {
-			amplitude[i]= amplitude[i]-ClutterMap[i]
-		}
-
-		var ampabs = [];
-		var maxValue = 0 ;
-		var maxPosition = 0;
-		for (var i = 0; i < data.bins; i++) {
-			ampabs[i]= Math.abs(amplitude[i])+1
-			// console.log(ampabs[i])
-			ampabs[i]= Math.log2(ampabs[i])*10
-			// console.log(ampabs[i])
-			if (ampabs[i] > maxValue ){
-				maxValue = ampabs[i];
-				maxPosition = i
-			}
-		}
-
-
-
-		distance =  (maxPosition*0.04)+ 0.4
-		// console.log(amplitude[maxPosition])
-		if (ampabs[maxPosition] > 30) {
-			UpdateDistance(distance, 0.3)
-		}
-		// console.log(Math.max(...amplitude), distance)
-		// console.log(Math.max(...data.amplitude))
-		renderAmp(ampabs)
-
+		renderAmp(data.amplitude)
 		renderPhase(data.phase)
-		polar.drawPhaseAmp(data.phase,ampabs)
-       });
     };
+
 	function renderAmp(data) {
 		ampctx.canvas.width  = window.innerWidth-50;
-		ampctx.canvas.height  = window.innerHeight/6;
+		ampctx.canvas.height  = window.innerHeight/2;
 		ampctx.clearRect(0, 0, ampcanvas.width, ampcanvas.height);
-		// ampctx.fillStyle = '#00CCFF'; // Color of the bars
 		bars = data.length;
 
 		for (var i = 0; i < bars; i++) {
 			bar_x = i * ampcanvas.width/bars;
 			bar_width = (ampcanvas.width/bars)-2;
-			bar_height = -data[i];
+			bar_height = -data[i]* 100;
 			ampctx.fillStyle = gradient[i]
-			//  fillRect( x, y, width, height ) // Explanation of the parameters below
-			ampctx.fillRect(bar_x, ampcanvas.height/2, bar_width, bar_height);
+			ampctx.fillRect(bar_x, ampcanvas.height, bar_width, bar_height);
 		}
 	}
 
 	function renderPhase(data) {
 		phasectx.canvas.width  = window.innerWidth-50;
-		phasectx.canvas.height  = window.innerHeight/6;
+		phasectx.canvas.height  = window.innerHeight/3;
 		phasectx.clearRect(0, 0, phasecanvas.width, phasecanvas.height);
-		// phasectx.fillStyle = '#00CCFF'; // Color of the bars
 		bars = data.length;
 
 		for (var i = 0; i < bars; i++) {
 			bar_x = i * phasecanvas.width/bars;
 			bar_width = (phasecanvas.width/bars)-2;
-			bar_height = Math.sin(data[i])*60;
+			bar_height =data[i]*30;
 			phasectx.fillStyle = gradient[i]
-			//  fillRect( x, y, width, height ) // Explanation of the parameters below
 			phasectx.fillRect(bar_x, phasecanvas.height/2, bar_width, bar_height);
 		}
 	}
-
-
-	function renderClutterMap(data) {
-		mapctx.canvas.width  = window.innerWidth-50;
-		mapctx.canvas.height  = window.innerHeight/6;
-		mapctx.clearRect(0, 0, mapcanvas.width, mapcanvas.height);
-		// phasectx.fillStyle = '#42f4b6'; // Color of the bars
-		bars = data.length;
-		for (var i = 0; i < bars; i++) {
-			bar_x = i * mapcanvas.width/bars;
-			bar_width = (mapcanvas.width/bars)-2;
-			bar_height = Math.sin(data[i])*60;
-			mapctx.fillStyle = gradient[i]
-			//  fillRect( x, y, width, height ) // Explanation of the parameters below
-			mapctx.fillRect(bar_x, mapcanvas.height/2, bar_width, bar_height);
-		}
-	}
-
-
-
-
-
-}]);
-
-
-app.controller("respCtrl", ["$scope", function($scope) {
 
   	var resploc = window.location,
   	    respebsocket_uri;
@@ -328,21 +86,12 @@ app.controller("respCtrl", ["$scope", function($scope) {
   	    respebsocket_uri = "ws:";
   	}
   	respebsocket_uri += "//" + resploc.host + "/ws/r";
-
-  	// conn = new WebSocket(websocket_uri);
     var respconn = new ReconnectingWebSocket(respebsocket_uri);
-
   	console.log("Websocket URI: " + respebsocket_uri)
-
-  	respconn.onclose = function(e) {
-  	};
-    respconn.onopen = function(e) {
-    };
+  	respconn.onclose = function(e) {};
+    respconn.onopen = function(e) {};
     respconn.onmessage = function(e) {
-		// console.log(e)
-    	// WebsocketMessageCount++
 		var respdata = JSON.parse(e.data);
-		// console.log(respdata)
 		Respiration(respdata)
 	};
 
@@ -352,36 +101,24 @@ function Respiration(data) {
 	respctx.canvas.width  = window.innerWidth-50;
 	respctx.canvas.height  = window.innerHeight/20;
 	respctx.clearRect(0, 0, respcanvas.width, respcanvas.height);
-	respctx.fillStyle = '#FF5733'; // Color of the bars
-	// bars = data.length;
+
 	bar_x = (respctx.canvas.width/2);
 	bar_y = 5
 	bar_width = -data.movement*50
 	bar_height = respctx.canvas.height -10
+	if (data.movement > 0) {
+		respctx.fillStyle = "#2a79f9";
+	} else {
+		respctx.fillStyle = "red";
+	}
 	respctx.fillRect(bar_x, bar_y, bar_width, bar_height);
-
-	// font = 30 + "pt Arial"
 	respctx.font = 30 + "pt Arial";
 	respctx.textAlign = "center";
 	respctx.textBaseline = "middle";
-
 	respctx.fillStyle = 'black';
-	text = data.state + " " + data.rpm + " " + distanceFiltered.toFixed(2)+ " " + data.distance.toFixed(2);
+	text = "State: " + data.state + "  RPM: " + data.rpm + "  Dist: " + data.distance.toFixed(2);
 	respctx.fillText(text, respctx.canvas.width/2, respctx.canvas.height/2);
-	// for (var i = 0; i < bars; i++) {
-	// 	bar_x = i * ampcanvas.width/bars;
-	// 	bar_width = (ampcanvas.width/bars)-2;
-	// 	bar_height = Math.sin(data[i])*60;
-	// 	//  fillRect( x, y, width, height ) // Explanation of the parameters below
-	// 	phasectx.fillRect(bar_x, phasecanvas.height/2, bar_width, bar_height);
-	// }
 }
-
-
-
-}]);
-
-
 
 </script>
 
