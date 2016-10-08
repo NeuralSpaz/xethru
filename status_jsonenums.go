@@ -12,12 +12,14 @@ var (
 		"respApp":    respApp,
 		"sleepApp":   sleepApp,
 		"basebandAP": basebandAP,
+		"basebandIQ": basebandIQ,
 	}
 
 	_statusValueToName = map[status]string{
 		respApp:    "respApp",
 		sleepApp:   "sleepApp",
 		basebandAP: "basebandAP",
+		basebandIQ: "basebandIQ",
 	}
 )
 
@@ -28,6 +30,7 @@ func init() {
 			interface{}(respApp).(fmt.Stringer).String():    respApp,
 			interface{}(sleepApp).(fmt.Stringer).String():   sleepApp,
 			interface{}(basebandAP).(fmt.Stringer).String(): basebandAP,
+			interface{}(basebandIQ).(fmt.Stringer).String(): basebandIQ,
 		}
 	}
 }

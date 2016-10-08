@@ -16,7 +16,7 @@ var (
 		"initializing":   initializing,
 		"stateReserved":  stateReserved,
 		"stateUnknown":   stateUnknown,
-		"SomeotherState": SomeotherState,
+		"someotherState": someotherState,
 	}
 
 	_respirationStateValueToName = map[respirationState]string{
@@ -27,7 +27,7 @@ var (
 		initializing:   "initializing",
 		stateReserved:  "stateReserved",
 		stateUnknown:   "stateUnknown",
-		SomeotherState: "SomeotherState",
+		someotherState: "someotherState",
 	}
 )
 
@@ -42,7 +42,7 @@ func init() {
 			interface{}(initializing).(fmt.Stringer).String():   initializing,
 			interface{}(stateReserved).(fmt.Stringer).String():  stateReserved,
 			interface{}(stateUnknown).(fmt.Stringer).String():   stateUnknown,
-			interface{}(SomeotherState).(fmt.Stringer).String(): SomeotherState,
+			interface{}(someotherState).(fmt.Stringer).String(): someotherState,
 		}
 	}
 }

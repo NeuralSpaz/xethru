@@ -32,6 +32,7 @@ import (
 	"github.com/NeuralSpaz/xethru"
 	"github.com/gorilla/websocket"
 	"github.com/jacobsa/go-serial/serial"
+	"github.com/mjibson/go-dsp/fft"
 	// "github.com/tarm/serial"
 )
 
@@ -52,10 +53,9 @@ func main() {
 	http.HandleFunc("/ws/bb", baseBandwsHandler)
 	http.HandleFunc("/ws/r", respirationwsHandler)
 
+	http.Handle("/", http.FileServer(http.Dir("./www")))
 	// http.HandleFunc("/", indexHandler)
-	// http.Handle("/", http.FileServer(http.Dir("./www")))
-	http.HandleFunc("/", indexHandler)
-	http.HandleFunc("/js/reconnecting-websocket.min.js", websocketReconnectHandler)
+	// http.HandleFunc("/js/reconnecting-websocket.min.js", websocketReconnectHandler)
 
 	go func() {
 		err := http.ListenAndServe("0.0.0.0:23000", nil)
@@ -72,6 +72,8 @@ func main() {
 				log.Panicln("Error Marshaling: ", err)
 			}
 			sendBaseBand(b)
+			// go addtoamp(data)
+
 		case data := <-resp:
 			b, err := json.Marshal(data)
 			if err != nil {
@@ -80,7 +82,17 @@ func main() {
 			sendrespiration(b)
 		}
 	}
+}
 
+var amp []float64
+
+func addtoamp(a xethru.BaseBandAmpPhase) {
+	if len(amp) > 3120 {
+		amp = amp[1:]
+	}
+	amp = append(amp, a.Amplitude[1])
+	x := fft.FFTReal(amp)
+	log.Println(len(amp), x)
 }
 
 func open(url string) error {
@@ -224,9 +236,20 @@ func openXethru(comm string, baudrate uint, baseband chan xethru.BaseBandAmpPhas
 	}
 	log.Println(reset)
 	port.Close()
-	time.Sleep(time.Millisecond * 5000)
+	// time.Sleep(time.Millisecond * 5000)
 
-	time.Sleep(time.Millisecond * 10000)
+	count := 20
+	for {
+		select {
+		case <-time.After(time.Second):
+			count--
+			log.Println(count)
+		}
+		if count == 0 {
+			break
+		}
+	}
+	// time.Sleep(time.Millisecond * 20000)
 
 	port, err = serial.Open(options)
 	if err != nil {
@@ -298,3 +321,32 @@ func openXethru(comm string, baudrate uint, baseband chan xethru.BaseBandAmpPhas
 		}
 	}
 }
+
+type kalman struct {
+	g  float64 // gain
+	em float64 // error in measument
+	ee float64 // error in estimate
+	e  float64 // estimate
+	le float64 // lastestimate
+}
+
+func (k *kalman) setMeasumentError(em float64) {
+	k.em = em
+}
+
+func (k *kalman) kalmanFilter(m float64) float64 {
+	k.g = k.ee / (k.ee + k.em)
+	k.e = k.le + k.g*(m-k.le)
+	k.ee = (1 - k.g) * k.ee
+	return k.e
+}
+
+//
+//
+//
+//
+//
+//
+//
+//
+//

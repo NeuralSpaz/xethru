@@ -3,27 +3,62 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="/js/reconnecting-websocket.min.js"></script>
-	<title>Xethru</title>
+	<script src="/js/chroma.min.js"></script>
+	<title>Xethru Demo</title>
 
 </head>
 <body ng-app="xethru" >
 <div>
 	  <canvas id="resp_render"></canvas>
-	  <canvas id="amplitude_render"></canvas>
+	  <canvas id="canvas"></canvas>
 	  <canvas id="phase_render"></canvas>
+	  <!-- <canvas id="Spectrogram"></canvas> -->
 </div>
 
 <script>
 
 	var ampcanvas, ampctx, phasecanvas, phasectx, bars, bar_x, bar_width, bar_height, respctx, respcanvas ;
-	ampcanvas = document.getElementById('amplitude_render');
-	ampctx = ampcanvas.getContext('2d');
+
+
+	// ampcanvas = document.getElementById('amplitude_render');
+	// ampctx = ampcanvas.getContext('2d');
 	phasecanvas = document.getElementById('phase_render');
 	phasectx = phasecanvas.getContext('2d');
 	respcanvas = document.getElementById('resp_render');
 	respctx = respcanvas.getContext('2d');
 	var gradient = ["#0011FF", "#0F10F0", "#1E0FE1", "#2D0ED2", "#3C0DC3", "#4B0BB3", "#5A0AA4", "#690A96", "#780987", "#870878", "#960769", "#A50559", "#B4044A", "#C3043C", "#D2032D", "#E1021E", "#F0010F", "#FF0000", "#F00F05", "#E11E0A", "#D22D0F", "#C33C14", "#B34B19", "#A45A1E", "#966923", "#877828", "#78872D", "#699632", "#59A537", "#4AB43C", "#3CC341", "#2DD246", "#1EE14B", "#0FF050", "#00FF55", "#0FFD50", "#1EFB4B", "#2DF946", "#3CF741", "#4BF63B", "#5AF436", "#69F232", "#78F02D", "#87EF28", "#96ED23", "#A5EB1D", "#B4E918", "#C3E814", "#D2E60F", "#E1E40A", "#F0E205", "#FFE100"]
 
+	// var ampctx = $("#amplitude_render").get()[0].getContext("2d");
+
+
+	var newCanvas = document.createElement("newcanvas"),
+	tempCanvas = document.getElementById("newcanvas"),
+
+	tempCtx = tempCanvas.getContext("2d");
+    tempCanvas.width=1024;
+    tempCanvas.height=256;
+
+	var NormaliseArray = [];
+	function Normalise() {
+		var offset = 0.4
+		var framesize = 0.04
+		for (var i =0 ; i<52; i++){
+			NormaliseArray[i]= (offset^4) + 4*framesize*i*(offset^3) - 6*(offset^2)*(framesize^2) - 4*i*offset*(framesize^3) + (framesize^4);
+			console.log(i, NormaliseArray[i])
+		}
+	}
+	Normalise()
+
+	var ClutterMap = [];
+	for (var i =0 ; i<52; i++){
+		ClutterMap[i]= 0
+	}
+
+	function UpdateClutterMap(amplitude, weight) {
+		for (var i =0 ; i<52; i++){
+			ClutterMap[i]= ClutterMap[i]*(1-weight) + (amplitude[i]*weight)
+		}
+	}
 
   	var bbloc = window.location,
   	    bbwebsocket_uri;
@@ -43,25 +78,37 @@
     bbconn.onmessage = function(e) {
       var data = JSON.parse(e.data);
 		renderAmp(data.amplitude)
+		// drawSpectrogram(data.amplitude)
 		renderPhase(data.phase)
     };
 
 	function renderAmp(data) {
-		ampctx.canvas.width  = window.innerWidth-50;
-		ampctx.canvas.height  = window.innerHeight/2;
-		ampctx.clearRect(0, 0, ampcanvas.width, ampcanvas.height);
+		// var tempCanvas = document.getElementById("canvas"),
+		// tempCtx = tempCanvas.getContext("2d");
+		// tempCanvas.width=1024;
+		// tempCanvas.height=256;
+
+		tempCtx.canvas.width  = window.innerWidth-50;
+		tempCtx.canvas.height  = window.innerHeight/2;
+		var canvas = document.getElementById("canvas");
+		tempCtx.drawImage(canvas, 0, 0, tempCtx.canvas.width, tempCtx.canvas.height);
+		var ctx =
+		// ampctx.clearRect(0, 0, ampcanvas.width, ampcanvas.height);
 		bars = data.length;
+		var offset = 4
 
 		for (var i = 0; i < bars; i++) {
-			bar_x = i * ampcanvas.width/bars;
-			bar_width = (ampcanvas.width/bars)-2;
-			bar_height = -data[i]* 100;
-			ampctx.fillStyle = gradient[i]
-			ampctx.fillRect(bar_x, ampcanvas.height, bar_width, bar_height);
+			bar_x = i * tempCanvas.width/bars;
+			bar_width = (tempCanvas.width/bars)-2;
+			bar_height = data[i]* NormaliseArray[i]*tempCanvas.height/100;
+			// console.log(bar_height)
+			tempCtx.fillStyle = colourGradient(-data[i]* NormaliseArray[i]/100)
+			tempCtx.fillRect(bar_x, tempCanvas.height, bar_width, -offset);
 		}
 	}
 
 	function renderPhase(data) {
+
 		phasectx.canvas.width  = window.innerWidth-50;
 		phasectx.canvas.height  = window.innerHeight/3;
 		phasectx.clearRect(0, 0, phasecanvas.width, phasecanvas.height);
@@ -70,8 +117,10 @@
 		for (var i = 0; i < bars; i++) {
 			bar_x = i * phasecanvas.width/bars;
 			bar_width = (phasecanvas.width/bars)-2;
-			bar_height =data[i]*30;
-			phasectx.fillStyle = gradient[i]
+			bar_height =Math.sin(data[i])*phasecanvas.height/4
+			var colour = (data[i]+(Math.PI))/(2*Math.PI)
+			// console.log(colour)
+			phasectx.fillStyle = colourGradient(colour)
 			phasectx.fillRect(bar_x, phasecanvas.height/2, bar_width, bar_height);
 		}
 	}
@@ -117,6 +166,52 @@ function Respiration(data) {
 	text = "State: " + data.state + "  RPM: " + data.rpm + "  Dist: " + data.distance.toFixed(2);
 	respctx.fillText(text, respctx.canvas.width/2, respctx.canvas.height/2);
 }
+
+	colourGradient = chroma.scale(['darkred', 'deeppink', 'lightyellow', 'lightgreen','teal']);
+
+	// var Spectrogramcanvas,Spectrogramctx;
+	// Spectrogramcanvas = document.getElementById('Spectrogram');
+	// Spectrogramctx = Spectrogramcanvas.getContext('2d');
+
+
+	// tempCanvas.width=1024;
+	// tempCanvas.height=256;
+
+	// function drawSpectrogram(array) {
+	// 	// preprocess array
+	// 	var data = [];
+	// 	for (var i = 0; i< array.length; i++) {
+	// 		data[i]= -array[i]* NormaliseArray[i]/100
+	// 	}
+	//
+	// 	Spectrogramctx.canvas.width  = window.innerWidth-50;
+	// 	Spectrogramctx.canvas.height  = window.innerHeight/2;
+	//
+    //     // copy the current canvas onto the temp canvas
+    //     var canvas = document.getElementById("Spectrogram");
+    //     tempCtx.drawImage(canvas, 0, 0, Spectrogramctx.canvas.width, Spectrogramctx.canvas.height);
+	//
+    //     // Each pixel is 4500/1024 = 4.39Hz wide
+    //     // iterate over the elements from the array
+	// 	bar_x = (tempCtx.canvas.width/2);
+	// 	bar_y = 5
+	// 	bar_width = -data.movement*50
+	// 	bar_height = tempCtx.canvas.height -10
+	//
+    //     for (var i = 0; i < array.length; i++) {
+	// 		bar_x = i * phasecanvas.width/bars;
+	// 		bar_width = (phasecanvas.width/bars)-2;
+	// 		bar_height =Math.sin(data[i])*phasecanvas.height/4
+    //         // draw each pixel with the specific color
+    //         var value = array[i];
+    //         Spectrogramctx.fillStyle = colourGradient(array[i])
+	//
+    //         // draw the line on top:
+    //         Spectrogramctx.fillRect(i, 1, 1, 1);
+    //     }
+    //     // draw the cached (previous) image one line down
+    //     Spectrogramctx.drawImage(tempCanvas, 0, 0, Spectrogramctx.canvas.width, Spectrogramctx.canvas.height, 0, 1, Spectrogramctx.canvas.width, Spectrogramctx.canvas.height);
+    // }
 
 </script>
 

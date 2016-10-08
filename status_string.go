@@ -5,21 +5,22 @@ package xethru
 import "fmt"
 
 const (
-	_status_name_0 = "basebandAP"
+	_status_name_0 = "basebandIQbasebandAP"
 	_status_name_1 = "sleepApp"
 	_status_name_2 = "respApp"
 )
 
 var (
-	_status_index_0 = [...]uint8{0, 10}
+	_status_index_0 = [...]uint8{0, 10, 20}
 	_status_index_1 = [...]uint8{0, 8}
 	_status_index_2 = [...]uint8{0, 7}
 )
 
 func (i status) String() string {
 	switch {
-	case i == 13:
-		return _status_name_0
+	case 12 <= i && i <= 13:
+		i -= 12
+		return _status_name_0[_status_index_0[i]:_status_index_0[i+1]]
 	case i == 594911596:
 		return _status_name_1
 	case i == 594935334:

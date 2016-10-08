@@ -4,7 +4,7 @@ package xethru
 
 import "fmt"
 
-const _respirationState_name = "breathingmovementtrackingnoMovementinitializingstateReservedstateUnknownSomeotherState"
+const _respirationState_name = "breathingmovementtrackingnoMovementinitializingstateReservedstateUnknownsomeotherState"
 
 var _respirationState_index = [...]uint8{0, 9, 17, 25, 35, 47, 60, 72, 86}
 
