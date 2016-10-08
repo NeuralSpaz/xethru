@@ -30,3 +30,6 @@ _testmain.go
 *.gz
 dumpfile
 examples/ping/ping
+examples/respiration/respiration
+examples/sleep/sleep
+*.json

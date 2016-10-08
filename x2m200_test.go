@@ -1,18 +1,12 @@
-// This file is part of Xethru-Go - A Golang library for the xethru modules
-//
-// The MIT License (MIT)
 // Copyright (c) 2016 Josh Gardiner aka NeuralSpaz on github.com
-
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-
 // The above copyright notice and this permission notice shall be included
 // in all copies or substantial portions of the Software.
-
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -20,6 +14,8 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
+
+// Xethru-GO a driver for the xethru sensor modules
 package xethru
 
 import (
@@ -27,18 +23,22 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
-	"log"
 	"testing"
 	"time"
 )
 
 // testing helper
 func NewXethruWriter(w io.Writer) io.Writer {
-	return x2m200Frame{w: w}
+	return &x2m200Frame{w: w}
 }
 
 func NewXethruReader(r io.Reader) io.Reader {
-	return x2m200Frame{r: r}
+	return &x2m200Frame{r: bufio.NewReader(r)}
+}
+
+// CreateSplitReadWriter Used help with testing Framer
+func CreateSplitReadWriter(w io.Writer, r io.Reader) Framer {
+	return &x2m200Frame{w: w, r: bufio.NewReader(r)}
 }
 
 func x2m200ProtocolwithTransit(in []byte) ([]byte, []byte, error) {
@@ -61,49 +61,7 @@ func x2m200ProtocolwithTransit(in []byte) ([]byte, []byte, error) {
 	return readback, transit, err
 }
 
-func newLoopBackXethru() (Framer, chan []byte, chan []byte) {
-	sensorReader, clientWriter := io.Pipe()
-	clientReader, sensorWriter := io.Pipe()
-	client := x2m200Frame{clientWriter, clientReader}
-	sensor := x2m200Frame{sensorWriter, sensorReader}
-	sensorSend := make(chan []byte)
-	sensorRecive := make(chan []byte)
-
-	go func() {
-		b := make([]byte, 256)
-		n, err := sensor.Read(b)
-		if err != nil {
-			log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
-		}
-		// for {
-		for n == 0 {
-			n, err = sensor.Read(b)
-			if err != nil {
-				log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
-				log.Printf("bytes %x\n", b)
-			}
-		}
-		sensorRecive <- b[:n]
-
-		for {
-			select {
-			case <-time.After(time.Millisecond * 1000):
-				return
-			case p := <-sensorSend:
-				n, err = sensor.Write(p)
-				if err != nil {
-					log.Printf("Ping Read Error %v, number of bytes %d\n", err, n)
-					log.Printf("bytes %x\n", b)
-				}
-			}
-		}
-
-	}()
-
-	return client, sensorSend, sensorRecive
-}
-
-func TestXethruWrite(t *testing.T) {
+func TestX2M200Write(t *testing.T) {
 
 	cases := []struct {
 		b      []byte
@@ -140,27 +98,28 @@ func TestXethruWrite(t *testing.T) {
 	}
 }
 
-func TestXethruRead(t *testing.T) {
+func TestX2M200Read(t *testing.T) {
 
 	cases := []struct {
 		readback []byte
 		err      error
 		writeout []byte
 	}{
-		{[]byte{0x01, 0x02, 0x00}, nil, []byte{0x7d, 0x01, 0x02, 0x00, 0x7e, 0x7e}},
-		{[]byte{0x01, 0x02, 0x03}, nil, []byte{0x7d, 0x01, 0x02, 0x03, 0x7d, 0x7e}},
-		{[]byte{0x00, 0x7c, 0x7f}, nil, []byte{0x7d, 0x00, 0x7c, 0x7f, 0x7e, 0x7e}},
+		{[]byte{0x01, 0x02, 0x00}, nil, []byte{0x7d, 0x01, 0x02, 0x00, 0x7f, 0x7e, 0x7e}},
+		{[]byte{0x01, 0x02, 0x03}, nil, []byte{0x7d, 0x01, 0x02, 0x03, 0x7f, 0x7d, 0x7e}},
+		{[]byte{0x00, 0x7c, 0x7f}, nil, []byte{0x7d, 0x00, 0x7c, 0x7f, 0x7f, 0x7e, 0x7e}},
 		{[]byte{0x00, 0x01, 0x02, 0x03}, nil, []byte{0x7d, 0x00, 0x01, 0x02, 0x03, 0x7d, 0x7e}},
 		{[]byte{0x00, 0x01, 0x02, 0x7e}, nil, []byte{0x7d, 0x00, 0x01, 0x02, 0x7f, 0x7e, 0x00, 0x7e}},
 		{[]byte{0x7e, 0x01, 0x02, 0x7e}, nil, []byte{0x7d, 0x7f, 0x7e, 0x01, 0x02, 0x7f, 0x7e, 0x7e, 0x7e}},
 		{[]byte{0x7e, 0x7e, 0x02, 0x7e}, nil, []byte{0x7d, 0x7f, 0x7e, 0x7f, 0x7e, 0x02, 0x7f, 0x7e, 0x01, 0x7e}},
 		{[]byte{0x7e, 0x7e, 0x7e, 0x7e}, nil, []byte{0x7d, 0x7f, 0x7e, 0x7f, 0x7e, 0x7f, 0x7e, 0x7f, 0x7e, 0x7d, 0x7e}},
-		{[]byte{0x01, 0x02, 0x03}, errorPacketNoStartByte, []byte{0x1d, 0x01, 0x02, 0x03, 0x7d, 0x7e}},
-		{[]byte{0x01, 0x02, 0x03}, errorPacketNotEndbyte, []byte{0x7d, 0x01, 0x02, 0x03, 0x7d, 0x7d}},
-		{[]byte{0x01, 0x02, 0x03}, errorPacketBadCRC, []byte{0x7d, 0x01, 0x02, 0x03, 0x71, 0x7e}},
-		{[]byte{0x01, 0x02, 0x03}, protocolErrorNotReconsied, []byte{0x7d, 0x20, 0x01, 0x5c, 0x7e}},
-		{[]byte{0x01, 0x02, 0x03}, protocolErrorCRCfailed, []byte{0x7d, 0x20, 0x02, 0x5f, 0x7e}},
-		{[]byte{0x01, 0x02, 0x03}, protocolErrorInvaidAppID, []byte{0x7d, 0x20, 0x03, 0x5e, 0x7e}},
+		{[]byte{0x01, 0x02, 0x03}, errPacketNoStartByte, []byte{0x1d, 0x01, 0x02, 0x03, 0x7d, 0x7e}},
+		{[]byte{}, io.EOF, []byte{}},
+		{[]byte{}, io.EOF, []byte{0x7d}},
+		{[]byte{0x01, 0x02, 0x03}, errPacketBadCRC, []byte{0x7d, 0x01, 0x02, 0x03, 0x71, 0x7e}},
+		{[]byte{0x01, 0x02, 0x03}, errProtocolErrorNotReconsied, []byte{0x7d, 0x20, 0x01, 0x5c, 0x7e}},
+		{[]byte{0x01, 0x02, 0x03}, errProtocolErrorCRCfailed, []byte{0x7d, 0x20, 0x02, 0x5f, 0x7e}},
+		{[]byte{0x01, 0x02, 0x03}, errProtocolErrorInvaidAppID, []byte{0x7d, 0x20, 0x03, 0x5e, 0x7e}},
 		{[]byte{}, nil, []byte{0x7d, 0x7d, 0x7e}},
 	}
 
@@ -168,7 +127,9 @@ func TestXethruRead(t *testing.T) {
 		r := bytes.NewReader(c.writeout)
 		x := NewXethruReader(r)
 
-		readback, err := ioutil.ReadAll(x)
+		b := make([]byte, 1024)
+		n, err := x.Read(b)
+		readback := b[:n]
 
 		if err != c.err {
 			t.Errorf("Expected: %s, got %s\n", c.err, err)
@@ -180,4 +141,43 @@ func TestXethruRead(t *testing.T) {
 			}
 		}
 	}
+}
+
+func newLoopBackXethru() (Framer, chan []byte, chan []byte) {
+	sensorReader, clientWriter := io.Pipe()
+	clientReader, sensorWriter := io.Pipe()
+	client := CreateSplitReadWriter(clientWriter, clientReader)
+	sensor := CreateSplitReadWriter(sensorWriter, sensorReader)
+
+	sensorSend := make(chan []byte)
+	sensorRecive := make(chan []byte)
+
+	go func() {
+		defer close(sensorSend)
+		for {
+			select {
+			case <-time.After(time.Millisecond * 1000):
+				return
+			case p := <-sensorSend:
+				_, err := sensor.Write(p)
+				if err != nil {
+					return
+				}
+			}
+		}
+	}()
+
+	go func() {
+		defer close(sensorRecive)
+		for {
+			b := make([]byte, 256)
+			n, err := sensor.Read(b)
+			if err != nil {
+				return
+			}
+			sensorRecive <- b[:n]
+		}
+	}()
+
+	return client, sensorSend, sensorRecive
 }

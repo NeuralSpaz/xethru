@@ -1,18 +1,12 @@
-// This file is part of Xethru-Go - A Golang library for the xethru modules
-//
-// The MIT License (MIT)
 // Copyright (c) 2016 Josh Gardiner aka NeuralSpaz on github.com
-
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-
 // The above copyright notice and this permission notice shall be included
 // in all copies or substantial portions of the Software.
-
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -20,54 +14,15 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-package main
+
+package xethru
 
 import (
 	"encoding/binary"
 	"errors"
-	"flag"
 	"log"
 	"time"
-
-	"github.com/NeuralSpaz/xethru"
-	"github.com/jacobsa/go-serial/serial"
 )
-
-func main() {
-	log.Println("X2M200 Ping Demo")
-	commPort := flag.String("commPort", "/dev/ttyUSB0", "the comm port you wish to use")
-	baudrate := flag.Uint("baudrate", 115200, "the baud rate for the comm port you wish to use")
-	pingTimeout := flag.Duration("pingTimeout", time.Millisecond*300, "timeout for ping command")
-	flag.Parse()
-
-	options := serial.OpenOptions{
-		PortName:        *commPort,
-		BaudRate:        *baudrate,
-		DataBits:        8,
-		StopBits:        1,
-		MinimumReadSize: 4,
-	}
-
-	port, err := serial.Open(options)
-	if err != nil {
-		log.Fatalf("serial.Open: %v", err)
-	}
-	defer port.Close()
-	x2 := xethru.Open("x2m200", port)
-
-	for i := 0; i < 10; i++ {
-		ok, err := Ping(x2, *pingTimeout)
-		if err != nil {
-			log.Fatalf("Error Communicating with Device: %v", err)
-		}
-		if !ok {
-			log.Fatal("Device Not Ready")
-		}
-		log.Println("Got Pong")
-
-		time.Sleep(*pingTimeout)
-	}
-}
 
 const (
 	x2m200PingCommand          = 0x01
@@ -76,14 +31,12 @@ const (
 	x2m200PingResponseNotReady = 0xaeeaeeaa
 )
 
-//
-// // Ping takes a time.Durration and waits for a maxium of that time before
-// // timing out, usefull for confirming configurations is working
-// // a true return with no error means the the xethru module is ready to
-// // to accept other commands.
-func Ping(x xethru.Framer, t time.Duration) (bool, error) {
+// Ping send the xethru ping command and will wait for the timeout to expire
+// before closing and returning an error, It is Recommended that you Reset or
+// panic if a Ping fails
+func (x x2m200Frame) Ping(t time.Duration) (bool, error) {
 	resp := make(chan []byte)
-	ping(x, resp)
+	x.ping(resp)
 	if t == 0 {
 		t = time.Millisecond * 100
 	}
@@ -99,11 +52,9 @@ func Ping(x xethru.Framer, t time.Duration) (bool, error) {
 
 }
 
-//
 var errPingTimeout = errors.New("ping timeout")
 
-//
-func ping(x xethru.Framer, response chan []byte) {
+func (x x2m200Frame) ping(response chan []byte) {
 	go func() {
 		// build ping command
 		// find betterway to do this
@@ -142,9 +93,9 @@ func ping(x xethru.Framer, response chan []byte) {
 //
 func isValidPingResponse(b []byte) (bool, error) {
 	// check response length is
-	if len(b) != 5 {
-		return false, errPingNotEnoughBytes
-	}
+	// if len(b) != 5 {
+	// 	return false, errPingNotEnoughBytes
+	// }
 	// Check response starts with Ping Byte
 	if b[0] != x2m200PingCommand {
 		return false, errPingDoesNotStartWithPingCMD
@@ -159,7 +110,6 @@ func isValidPingResponse(b []byte) (bool, error) {
 	default:
 		return false, errPingDoesNotContainResponse
 	}
-
 }
 
 //
