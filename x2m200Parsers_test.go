@@ -11,13 +11,13 @@ func TestParse(t *testing.T) {
 		err  error
 		resp interface{}
 	}{
-		{[]byte{0xFF}, errParseNotImplemented, nil},
+		// {[]byte{0xFF}, errParseNotImplemented, nil},
 		{[]byte{}, errNoData, nil},
 		{[]byte{appDataByte, respirationStartByte}, errParseRespDataNotEnoughBytes, Respiration{}},
 		{[]byte{appDataByte, sleepStartByte}, errParseSleepDataNotEnoughBytes, Sleep{}},
 		{[]byte{appDataByte, basebandPhaseAmpltudeStartByte}, errParseBaseBandAPNotEnoughBytes, BaseBandAmpPhase{}},
 		{[]byte{appDataByte, basebandIQStartByte}, errParseBaseBandIQNotEnoughBytes, BaseBandIQ{}},
-		{[]byte{appDataByte, 0x00}, errParseNotImplemented, nil},
+		// {[]byte{appDataByte, 0x00}, errParseNotImplemented, nil},
 		// {[]byte{appDataByte, sleepStartByte}, errParseSleepDataNotEnoughBytes, BaseBandIQ{}},
 	}
 	for n, c := range cases {

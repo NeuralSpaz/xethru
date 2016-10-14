@@ -30,12 +30,13 @@ import (
 
 // Open Creates a x2m200 xethu serial protocol from a io.ReadWriter
 // it implements io.Reader and io.Writer
-func Open(device string, port io.ReadWriter) Framer {
+func Open(device string, port io.ReadWriteCloser) Framer {
 	// fmt.Println("New instance of Xethru")
 	// if device == "x2m200" {
 	x := &x2m200Frame{
 		w: port,
 		r: bufio.NewReader(port),
+		c: port,
 	}
 	// TODO: disable all feeds
 	return x
@@ -45,6 +46,7 @@ func Open(device string, port io.ReadWriter) Framer {
 type Framer interface {
 	io.Writer
 	io.Reader
+	io.Closer
 	Reset() (bool, error)
 }
 

@@ -2,64 +2,11 @@ package xethru
 
 import (
 	"encoding/binary"
-	"errors"
+	"fmt"
 	"log"
 	"math"
 	"time"
 )
-
-// Respiration is the struct
-type Respiration struct {
-	Time          int64            `json:"time"`
-	Status        status           `json:"status"`
-	Counter       uint32           `json:"counter"`
-	State         respirationState `json:"state"`
-	RPM           uint32           `json:"rpm"`
-	Distance      float64          `json:"distance"`
-	SignalQuality float64          `json:"signalquality"`
-	Movement      float64          `json:"movement"`
-}
-
-// Sleep is the struct
-type Sleep struct {
-	Time          int64            `json:"time"`
-	Status        status           `json:"type"`
-	Counter       uint32           `json:"counter"`
-	State         respirationState `json:"state"`
-	RPM           float64          `json:"rpm"`
-	Distance      float64          `json:"distance"`
-	SignalQuality float64          `json:"signalquality"`
-	MovementSlow  float64          `json:"movementslow"`
-	MovementFast  float64          `json:"movementfast"`
-}
-
-// BaseBandAmpPhase is the struct
-type BaseBandAmpPhase struct {
-	Time         int64     `json:"time"`
-	Status       status    `json:"type"`
-	Counter      uint32    `json:"counter"`
-	Bins         uint32    `json:"bins"`
-	BinLength    float64   `json:"binlength"`
-	SamplingFreq float64   `json:"samplingfreq"`
-	CarrierFreq  float64   `json:"carrier"`
-	RangeOffset  float64   `json:"offset"`
-	Amplitude    []float64 `json:"amplitude"`
-	Phase        []float64 `json:"phase"`
-}
-
-// BaseBandIQ is the struct
-type BaseBandIQ struct {
-	Time         int64     `json:"time"`
-	Status       status    `json:"type"`
-	Counter      uint32    `json:"counter"`
-	Bins         uint32    `json:"bins"`
-	BinLength    float64   `json:"binlength"`
-	SamplingFreq float64   `json:"samplingfreq"`
-	CarrierFreq  float64   `json:"carrier"`
-	RangeOffset  float64   `json:"offset"`
-	SigI         []float64 `json:"i"`
-	SigQ         []float64 `json:"q"`
-}
 
 type status uint32
 
@@ -138,23 +85,53 @@ const x2m200SetLEDControl = 0x24
 // SetLEDMode is
 // Example: <Start> + <XTS_SPC_MOD_SETLEDCONTROL> + <Mode> + <Reserved> + <CRC> + <End>
 // Response: <Start> + <XTS_SPR_ACK> + <CRC> + <End>
-func (r *Module) SetLEDMode() {
+func (r *Module) SetLEDMode() error {
 	// if r.LEDMode == nil {
 	// 	r.LEDMode == LEDOff
 	// }
 	log.Println("Setting LED MODE")
 	n, err := r.f.Write([]byte{x2m200SetLEDControl, byte(r.LEDMode), 0x00})
 	if err != nil {
-		log.Println(err, n)
+		return err
 	}
-	b := make([]byte, 1024)
+
+	attempts := 0
+reRead:
+	b := make([]byte, 2048)
 	n, err = r.f.Read(b)
 	if err != nil {
-		log.Println(err, n)
+		log.Printf("Reset read Error %v, number of bytes %d\n", err, n)
+		return err
 	}
-	if b[0] != x2m200Ack {
-		log.Println("Not Ack")
+	state, err := parse(b[:n])
+	if err != nil {
+		log.Printf("Parse read Error %v, state %#+v \n", err, state)
+		return err
 	}
+	// log.Printf("Debug state %#+v \n", state)
+	switch state.(type) {
+	case SystemMessage:
+		s := state.(SystemMessage)
+		if s.Message == "Command Ack'ed" {
+			return nil
+		}
+	default:
+		if attempts < 20 {
+			attempts++
+			goto reRead
+		}
+
+	}
+	return fmt.Errorf("failed to set led mode\n")
+
+	// b := make([]byte, 1024)
+	// n, err = r.f.Read(b)
+	// if err != nil {
+	// 	log.Println(err, n)
+	// }
+	// if b[0] != x2m200Ack {
+	// 	log.Println("Not Ack")
+	// }
 }
 
 const (
@@ -169,7 +146,7 @@ var x2m200DetectionZone = [4]byte{0x96, 0xa1, 0x0a, 0x1c}
 // SetDetectionZone is
 // Example: <Start> + <XTS_SPC_APPCOMMAND> + <XTS_SPCA_SET> + [XTS_ID_DETECTION_ZONE(i)] + [Start(f)] + [End(f)] + <CRC> + <End>
 // Response: <Start> + <XTS_SPR_ACK> + <CRC> + <End>
-func (r Module) SetDetectionZone(start, end float64) {
+func (r Module) SetDetectionZone(start, end float64) error {
 	log.Printf("Setting Detection zone starting at %2.2fm ending at %2.2fm\n", start, end)
 
 	r.DetectionZoneStart = float32(start)
@@ -184,20 +161,51 @@ func (r Module) SetDetectionZone(start, end float64) {
 	// n, err := r.f.Write([]byte{x2m200AppCommand, x2m200Set, x2m200DetectionZone[0], x2m200DetectionZone[1], x2m200DetectionZone[2], x2m200DetectionZone[3], startbytes[0], startbytes[1], startbytes[2], startbytes[3], endbytes[0], endbytes[1], endbytes[2], endbytes[3]})
 
 	n, err := r.f.Write([]byte{0x10, 0x10, 0x1c, 0x0a, 0xa1, 0x96, startbytes[0], startbytes[1], startbytes[2], startbytes[3], endbytes[0], endbytes[1], endbytes[2], endbytes[3]})
-
 	if err != nil {
-		log.Println(err, n)
+		return err
+		// log.Println(err, n)
 	}
-	b := make([]byte, 1024)
+
+	attempts := 0
+reRead:
+	b := make([]byte, 2048)
 	n, err = r.f.Read(b)
 	if err != nil {
-		log.Println(err, n)
+		log.Printf("Reset read Error %v, number of bytes %d\n", err, n)
+		return err
 	}
-	if b[0] != x2m200Ack {
-		log.Printf("%#02x\n", b[0:n])
-		log.Println("Not Ack")
+	state, err := parse(b[:n])
+	if err != nil {
+		log.Printf("Parse read Error %v, state %#+v \n", err, state)
+		return err
 	}
+	// log.Printf("Debug state %#+v \n", state)
+	switch state.(type) {
+	case SystemMessage:
+		s := state.(SystemMessage)
+		if s.Message == "Command Ack'ed" {
+			return nil
+		}
+	default:
+		if attempts < 20 {
+			attempts++
+			goto reRead
+		}
+
+	}
+	return fmt.Errorf("failed to set detection zone %2.2f %2.2f\n", start, end)
 }
+
+// b := make([]byte, 1024)
+// n, err = r.f.Read(b)
+// if err != nil {
+// 	log.Println(err, n)
+// }
+// if b[0] != x2m200Ack {
+// 	log.Printf("%#02x\n", b[0:n])
+// 	log.Println("Not Ack")
+// }
+// }
 
 // var x2m200Sensitivity = [4]byte{0x10, 0xa5, 0x11, 0x2b}
 var x2m200Sensitivity = [4]byte{0x2b, 0x11, 0xa5, 0x10}
@@ -205,7 +213,7 @@ var x2m200Sensitivity = [4]byte{0x2b, 0x11, 0xa5, 0x10}
 // SetSensitivity is
 // Example: <Start> + <XTS_SPC_APPCOMMAND> + <XTS_SPCA_SET> + [XTS_ID_SENSITIVITY(i)] + [Sensitivity(i)]+ <CRC> + <End>
 // Response: <Start> + <XTS_SPR_ACK> + <CRC> + <End>
-func (r Module) SetSensitivity(sensitivity int) {
+func (r Module) SetSensitivity(sensitivity int) error {
 
 	if sensitivity > 9 {
 		sensitivity = 9
@@ -222,15 +230,34 @@ func (r Module) SetSensitivity(sensitivity int) {
 	if err != nil {
 		log.Println(err, n)
 	}
-	b := make([]byte, 1024)
+	attempts := 0
+reRead:
+	b := make([]byte, 2048)
 	n, err = r.f.Read(b)
 	if err != nil {
-		log.Println(err, n)
+		log.Printf("Reset read Error %v, number of bytes %d\n", err, n)
+		return err
 	}
-	if b[0] != x2m200Ack {
-		log.Printf("%#02x\n", b[0:n])
-		log.Println("Not Ack")
+	state, err := parse(b[:n])
+	if err != nil {
+		log.Printf("Parse read Error %v, state %#+v \n", err, state)
+		return err
 	}
+	// log.Printf("Debug state %#+v \n", state)
+	switch state.(type) {
+	case SystemMessage:
+		s := state.(SystemMessage)
+		if s.Message == "Command Ack'ed" {
+			return nil
+		}
+	default:
+		if attempts < 20 {
+			attempts++
+			goto reRead
+		}
+
+	}
+	return fmt.Errorf("failed to set sensitivity %d\n", sensitivity)
 }
 
 const (
@@ -242,23 +269,51 @@ const (
 // Example: <Start> + <XTS_SPC_MOD_LOADAPP> + [AppID(i)] + <CRC> + <End>
 // Response: <Start> + <XTS_SPR_ACK> + <CRC> + <End>
 func (r Module) Load() error {
+load:
 	n, err := r.f.Write([]byte{x2m200LoadModule, r.AppID[0], r.AppID[1], r.AppID[2], r.AppID[3]})
 	if err != nil {
 		log.Println(err, n)
 		return err
 	}
+	attempts := 0
+reRead:
 	b := make([]byte, 2048)
 	n, err = r.f.Read(b)
 	if err != nil {
-		log.Println(err, n)
+		log.Printf("Reset read Error %v, number of bytes %d\n", err, n)
 		return err
 	}
-	if b[0] != x2m200Ack {
-		log.Printf("%#02x\n", b[0:n])
-		log.Println("Not Ack")
-		return errors.New("load module error, was not ack'ed")
+	state, err := parse(b[:n])
+	if err != nil {
+		log.Printf("Parse read Error %v, state %#+v \n", err, state)
+		return err
 	}
-	return nil
+	// log.Printf("Debug state %#+v \n", state)
+	switch state.(type) {
+	case SystemMessage:
+		s := state.(SystemMessage)
+		if s.Message == "Command Ack'ed" {
+			return nil
+		}
+		if s.Message == "System Still booting" {
+			if attempts < 20 {
+				goto reRead
+			}
+		}
+		if s.Message == "System Ready" {
+			if attempts < 20 {
+				goto load
+			}
+		}
+		// return x.Reset()
+	default:
+		if attempts < 20 {
+			goto reRead
+		}
+
+	}
+
+	return fmt.Errorf("did not recive ack for load module\n")
 }
 
 // <Start> + <XTS_SPC_DIR_COMMAND> + <XTS_SDC_APP_SETINT> + [XTS_SACR_OUTPUTBASEBAND(i)] + [Length(i)] + [EnableCode(i)] + <CRC> + <End> Response: <Start> + <XTS_SPR_ACK> + <CRC> + <End>
@@ -292,19 +347,49 @@ func (r Module) Enable(mode string) error {
 		}
 	}
 
-	b := make([]byte, 1024)
+	attempts := 0
+reRead:
+	b := make([]byte, 2048)
 	n, err := r.f.Read(b)
 	if err != nil {
-		log.Println(err, n)
+		log.Printf("Reset read Error %v, number of bytes %d\n", err, n)
 		return err
 	}
-	if b[0] != x2m200Ack {
-		log.Printf("%#02x\n", b[0:n])
-		log.Println("Not Ack")
-		return errors.New("error enable Phase Amp Baseband was not ack'ed")
+	state, err := parse(b[:n])
+	if err != nil {
+		log.Printf("Parse read Error %v, state %#+v \n", err, state)
+		return err
 	}
-	return nil
+	// log.Printf("Debug state %#+v \n", state)
+	switch state.(type) {
+	case SystemMessage:
+		s := state.(SystemMessage)
+		if s.Message == "Command Ack'ed" {
+			return nil
+		}
+	default:
+		if attempts < 20 {
+			attempts++
+			goto reRead
+		}
+
+	}
+	return fmt.Errorf("failed to set Enable %s mode", mode)
 }
+
+// 	b := make([]byte, 1024)
+// 	n, err := r.f.Read(b)
+// 	if err != nil {
+// 		log.Println(err, n)
+// 		return err
+// 	}
+// 	if b[0] != x2m200Ack {
+// 		log.Printf("%#02x\n", b[0:n])
+// 		log.Println("Not Ack")
+// 		return errors.New("error enable Phase Amp Baseband was not ack'ed")
+// 	}
+// 	return nil
+// }
 
 // Run start app
 func (r Module) Run(stream chan interface{}) {

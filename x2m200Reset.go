@@ -20,73 +20,90 @@
 package xethru
 
 import (
-	"bytes"
 	"errors"
+	"io"
 	"log"
-	"time"
 )
 
 const (
-	resetCmd      = 0x22
-	resetAck      = 0x10
-	systemMesg    = 0x30
-	systemBooting = 0x10
-	systemReady   = 0x11
+	resetCmd = 0x22
 )
 
 // Reset should be the first to be called when connecting to the X2M200 sensor
 func (x x2m200Frame) Reset() (bool, error) {
+	last := "disableBaseBand"
 
-	n, err := x.Write([]byte{resetCmd})
+disableBaseBand:
+	// log.Println("disableBaseBand")
+	// Disbale Basebands
+	//  ([]byte{0x90, 0x71, 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00})
+	n, err := x.Write([]byte{0x90, 0x71, 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	last = "disableBaseBand"
+	goto reRead
 
+disableRespiration:
+	// log.Println("Disable Respiration")
+	// Disbale Basebands
+	//    				   {0x90, 0x71, 0x11, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	// n, err = x.Write([]byte{0x90, 0x71, 0x11, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	n, err = x.Write([]byte{0x20, 0x11})
+	last = "disableRespiration"
+	goto reRead
+
+reset:
+	// log.Println("Reset")
+	n, err = x.Write([]byte{resetCmd})
 	if err != nil {
-		log.Printf("Reset Write Error %v, number of bytes %d\n", err, n)
+		// log.Printf("Reset Write Error %v, number of bytes %d\n", err, n)
+		return false, err
 	}
+	last = "reset"
+	goto reRead
 
-	b := make([]byte, 4096)
+reRead:
+	b := make([]byte, 2048)
 	n, err = x.Read(b)
+	// log.Println("Reading")
 	if err != nil {
-		log.Printf("Reset Read Error %v, number of bytes %d\n", err, n)
-	}
-	ok, err := isValidResetResponse(b[:n])
-	if err != nil {
-		log.Printf("Reset Read Error %v, number of bytes %d\n", err, n)
-	}
-	for !ok {
-		time.Sleep(time.Millisecond * 5)
-		b := make([]byte, 1024)
-		n, err = x.Read(b)
-		if err != nil {
-			log.Printf("Reset Read Error %v, number of bytes %d\n", err, n)
-		}
-		ok, err = isValidResetResponse(b[:n])
-		if err != nil {
-			log.Printf("Reset Read Error %v, number of bytes %d\n", err, n)
+		// log.Printf("Reset read Error %v, number of bytes %d\n", err, n)
+		if err == io.EOF {
+			return true, nil
 		}
 	}
-	return true, nil
-}
+	if n == 0 {
+		goto reset
+	}
+	state, err := parse(b[:n])
+	if err != nil {
+		// log.Printf("Parse read Error %v, state %#+v \n", err, state)
+		return false, err
+	}
+	// log.Printf("Debug state %#+v \n", state)
+	switch state.(type) {
+	case SystemMessage:
+		s := state.(SystemMessage)
+		if s.Message == "Command Ack'ed" {
+			if last == "reset" {
+				// log.Println("Yay we got there")
+				return true, nil
+			}
+			goto reset
+		}
 
-var errResetTimeout = errors.New("reset timeout")
+		// return x.Reset()
+	case BaseBandAmpPhase:
+		goto disableBaseBand
+	case Respiration:
+		goto disableRespiration
+	// case Sleep:
+	// 	// TODO DISABLE Sleep
+	default:
+		log.Printf("\n\n%#+v\n\n", state)
+		goto reRead
 
-func isValidResetResponse(b []byte) (bool, error) {
-	log.Printf("RESET DEBUG: %#02x", b)
-	if len(b) == 0 {
-		return false, errResetNotEnoughBytes
 	}
-	if bytes.Contains(b, []byte{systemMesg, systemReady}) {
-		log.Println("System Ready")
-		return true, nil
-	}
-	if bytes.Contains(b, []byte{systemMesg, systemBooting}) {
-		log.Println("System Booting")
-		return false, nil
-	}
-	if b[0] == resetAck {
-		log.Println("Reset command confirmed")
-		return true, nil
-	}
-	return false, errResetResponseError
+
+	return false, nil
 }
 
 var errResetNotEnoughBytes = errors.New("reset not enough bytes in response")

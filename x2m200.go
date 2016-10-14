@@ -26,6 +26,7 @@ import (
 type x2m200Frame struct {
 	w io.Writer
 	r *bufio.Reader
+	c io.Closer
 	// frameBuffer []byte
 }
 
@@ -36,6 +37,10 @@ const (
 	crcFailed    protocolError = 0x02
 	invaidAppID  protocolError = 0x03
 )
+
+func (x *x2m200Frame) Close() error {
+	return x.c.Close()
+}
 
 func (x *x2m200Frame) Write(p []byte) (n int, err error) {
 

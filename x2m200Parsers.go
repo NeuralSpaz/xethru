@@ -13,44 +13,69 @@ const (
 	sleepStartByte                 = 0x6c
 	basebandPhaseAmpltudeStartByte = 0x0d
 	basebandIQStartByte            = 0x0c
+	systemMesg                     = 0x30
+	systemBooting                  = 0x10
+	systemReady                    = 0x11
+	ack                            = 0x10
 )
 
-// type Parser interface {
-// 	Parse([]byte) error
-// }
-//
-// type RespirationApp struct {
-// 	n int
-// }
-//
-// func Mangle(p Parser) {}
+// Respiration is the struct
+type Respiration struct {
+	Time          int64            `json:"time"`
+	Status        status           `json:"status"`
+	Counter       uint32           `json:"counter"`
+	State         respirationState `json:"state"`
+	RPM           uint32           `json:"rpm"`
+	Distance      float64          `json:"distance"`
+	SignalQuality float64          `json:"signalquality"`
+	Movement      float64          `json:"movement"`
+}
 
-//
-// type SleepApp struct {
-// 	n int
-// }
-//
-// type BaseBandAPApp struct {
-// 	n int
-// }
-//
-// type BaseBandIQApp struct {
-// 	n int
-// }
-//
-// func (r RespirationApp) Parse(b []byte) error {
-// 	return nil
-// }
+// Sleep is the struct
+type Sleep struct {
+	Time          int64            `json:"time"`
+	Status        status           `json:"type"`
+	Counter       uint32           `json:"counter"`
+	State         respirationState `json:"state"`
+	RPM           float64          `json:"rpm"`
+	Distance      float64          `json:"distance"`
+	SignalQuality float64          `json:"signalquality"`
+	MovementSlow  float64          `json:"movementslow"`
+	MovementFast  float64          `json:"movementfast"`
+}
 
-// func (r SleepApp) Parse(b []byte) error {
-// 	return nil
-// }
-// func (r BaseBandAPApp) Parse(b []byte) error {
-// 	return nil
-// }
-// func (r BaseBandIQApp) Parse(b []byte) error {
-// 	return nil
-// }
+// BaseBandAmpPhase is the struct
+type BaseBandAmpPhase struct {
+	Time         int64     `json:"time"`
+	Status       status    `json:"type"`
+	Counter      uint32    `json:"counter"`
+	Bins         uint32    `json:"bins"`
+	BinLength    float64   `json:"binlength"`
+	SamplingFreq float64   `json:"samplingfreq"`
+	CarrierFreq  float64   `json:"carrier"`
+	RangeOffset  float64   `json:"offset"`
+	Amplitude    []float64 `json:"amplitude"`
+	Phase        []float64 `json:"phase"`
+}
+
+// BaseBandIQ is the struct
+type BaseBandIQ struct {
+	Time         int64     `json:"time"`
+	Status       status    `json:"type"`
+	Counter      uint32    `json:"counter"`
+	Bins         uint32    `json:"bins"`
+	BinLength    float64   `json:"binlength"`
+	SamplingFreq float64   `json:"samplingfreq"`
+	CarrierFreq  float64   `json:"carrier"`
+	RangeOffset  float64   `json:"offset"`
+	SigI         []float64 `json:"i"`
+	SigQ         []float64 `json:"q"`
+}
+
+// SystemMessage is the struct
+type SystemMessage struct {
+	Message string
+}
 
 func parse(b []byte) (interface{}, error) {
 	// log.Printf("%02x\n", b)
@@ -70,11 +95,24 @@ func parse(b []byte) (interface{}, error) {
 		case basebandIQStartByte:
 			return parseBaseBandIQ(b)
 		default:
-			return nil, errParseNotImplemented
+			return b, errParseNotImplemented
 		}
+	case systemMesg:
+		switch b[1] {
+		case systemBooting:
+			return SystemMessage{Message: "System Still booting"}, nil
+		case systemReady:
+			return SystemMessage{Message: "System Ready"}, nil
+		default:
+			return b, errParseNotImplemented
+		}
+	case ack:
+		return SystemMessage{Message: "Command Ack'ed"}, nil
+
 	default:
-		return nil, errParseNotImplemented
+		return b, errParseNotImplemented
 	}
+	// return nil, fmt.Errorf("something went wrong: %#02x\n", b)
 }
 
 var (
