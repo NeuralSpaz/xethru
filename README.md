@@ -8,4 +8,4 @@ for details on the Xethru X2M200 Respiration Sensor
 https://www.xethu.com
 
 for example usage see
-https://github.com/NeuralSpaz/xethru-web-exporer
+https://github.com/NeuralSpaz/xethru-web-explorer
